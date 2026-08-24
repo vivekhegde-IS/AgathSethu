@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RFID_DETECTED",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "timestamp_sim",
+    "source",
+    "junction_id",
+    "reader_id",
+    "vehicle_id",
+    "tag_id"
+  ],
+  "properties": {
+    "event_id": { "type": "string" },
+    "event_type": { "type": "string", "enum": ["RFID_DETECTED"] },
+    "timestamp_sim": { "type": "number" },
+    "source": { "type": "string" },
+    "junction_id": { "type": "string" },
+    "reader_id": { "type": "string" },
+    "vehicle_id": { "type": "string" },
+    "tag_id": { "type": "string" },
+    "plate_number": { "type": "string" }
+  }
+}

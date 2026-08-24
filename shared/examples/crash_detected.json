@@ -1,0 +1,14 @@
+{
+  "event_id": "evt_crash_1024",
+  "event_type": "CRASH_DETECTED",
+  "timestamp_sim": 102.43,
+  "source": "member1",
+  "junction_id": "J02",
+  "vehicle_id": "V001",
+  "confidence": 0.94,
+  "telemetry_summary": {
+    "peak_g_force": 6.82,
+    "delta_v_mph": 24.5,
+    "sensor_type": "IMU_ACCELEROMETER"
+  }
+}

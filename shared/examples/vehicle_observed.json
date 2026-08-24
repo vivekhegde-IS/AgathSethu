@@ -1,0 +1,11 @@
+{
+  "event_id": "evt_cam_1028",
+  "event_type": "VEHICLE_OBSERVED",
+  "timestamp_sim": 145.20,
+  "source": "member2",
+  "junction_id": "J04",
+  "camera_id": "CAM_J04_HWY",
+  "vehicle_id": "V002",
+  "plate_number": "KA05XY5678",
+  "confidence": 0.92
+}

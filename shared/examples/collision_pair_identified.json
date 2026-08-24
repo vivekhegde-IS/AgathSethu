@@ -1,0 +1,13 @@
+{
+  "event_id": "evt_col_1025",
+  "event_type": "COLLISION_PAIR_IDENTIFIED",
+  "timestamp_sim": 102.45,
+  "source": "member2",
+  "junction_id": "J02",
+  "vehicle_ids": [
+    "V001",
+    "V002"
+  ],
+  "confidence": 0.91,
+  "impact_severity": "HIGH"
+}

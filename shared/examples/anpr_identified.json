@@ -1,0 +1,11 @@
+{
+  "event_id": "evt_anpr_1026",
+  "event_type": "ANPR_IDENTIFIED",
+  "timestamp_sim": 102.50,
+  "source": "member2",
+  "junction_id": "J02",
+  "camera_id": "CAM_J02_MAIN",
+  "vehicle_id": "V002",
+  "plate_number": "KA05XY5678",
+  "confidence": 0.96
+}

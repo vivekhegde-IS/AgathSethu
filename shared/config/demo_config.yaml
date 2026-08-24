@@ -1,0 +1,74 @@
+project:
+  name: "AI-Based Hit-and-Run Accident Detection, Vehicle Identification and Multi-Junction Tracking System"
+  version: "1.0.0"
+  mode: "DEMO"  # DEMO or INTEGRATION
+
+system:
+  api_host: "127.0.0.1"
+  api_port: 8000
+  database_url: "sqlite:///member3/hit_and_run.db"
+
+junctions:
+  J01:
+    name: "Junction 1"
+    description: "North Entry Junction"
+    latitude: 12.9716
+    longitude: 77.5946
+    is_crash_junction: false
+  J02:
+    name: "Crash Junction"
+    description: "Main Intersection - Crash Site"
+    latitude: 12.9725
+    longitude: 77.5955
+    is_crash_junction: true
+  J03:
+    name: "Junction 3"
+    description: "East Bypass Road - RFID Checkpoint"
+    latitude: 12.9734
+    longitude: 77.5970
+    is_crash_junction: false
+  J04:
+    name: "Junction 4"
+    description: "Highway Exit - Camera Checkpoint"
+    latitude: 12.9745
+    longitude: 77.5985
+    is_crash_junction: false
+
+vehicles:
+  V001:
+    plate_number: "KA01AB1234"
+    model: "Sedan (Blue)"
+    role: "VICTIM"
+    rfid_tag: "TAG_V001_88A"
+  V002:
+    plate_number: "KA05XY5678"
+    model: "SUV (Black)"
+    role: "SUSPECT"
+    rfid_tag: "TAG_V002_99B"
+
+sensors:
+  member1:
+    imu:
+      sampling_rate_hz: 50
+      crash_threshold_g: 4.5
+      window_seconds: 0.5
+  member2:
+    vision:
+      fps: 30
+      proximity_threshold_m: 5.0
+      track_lifetime_seconds: 30
+      anpr_confidence_min: 0.85
+  member3:
+    rfid:
+      reader_id: "RFID_J03_R01"
+      read_range_m: 15.0
+
+demo_scenario:
+  incident_id: "INC-000001"
+  crash_junction: "J02"
+  timestamp_start: 100.0
+  crash_timestamp: 102.43
+  involved_vehicles: ["V001", "V002"]
+  suspect_vehicle: "V002"
+  expected_route: ["J02", "J03", "J04"]
+  last_known_location: "J04"

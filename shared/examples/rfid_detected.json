@@ -1,0 +1,11 @@
+{
+  "event_id": "evt_rfid_1027",
+  "event_type": "RFID_DETECTED",
+  "timestamp_sim": 125.10,
+  "source": "member3",
+  "junction_id": "J03",
+  "reader_id": "RFID_J03_R01",
+  "vehicle_id": "V002",
+  "tag_id": "TAG_V002_99B",
+  "plate_number": "KA05XY5678"
+}

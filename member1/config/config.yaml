@@ -1,0 +1,57 @@
+# Member 1 Configuration File
+
+simulation:
+  mode: "AUTO"  # AUTO (tries CARLA first, falls back to Kinematic Physics), CARLA, or KINEMATIC
+  carla_host: "127.0.0.1"
+  carla_port: 2000
+  carla_timeout: 5.0
+  sampling_rate_hz: 50.0  # Hz
+  duration_seconds: 10.0
+  crash_timestamp_sim: 102.43
+  junction_id: "J02"
+  junction_name: "Crash Junction"
+  location:
+    x: 104.2
+    y: 52.7
+    z: 0.3
+
+vehicles:
+  V001:
+    carla_id: 43
+    plate_number: "KA01AB1234"
+    role: "VICTIM"
+    initial_speed_kmh: 40.0
+    impact_decel_g: 5.8
+    gyro_pulse_rads: 3.7
+  V002:
+    carla_id: 51
+    plate_number: "KA05XY5678"
+    role: "SUSPECT"
+    initial_speed_kmh: 45.0
+    impact_decel_g: 6.2
+    gyro_pulse_rads: 4.1
+
+imu:
+  sampling_rate_hz: 50.0
+  accel_noise_std: 0.05  # m/s^2 noise
+  gyro_noise_std: 0.02   # rad/s noise
+  gravity_m_s2: 9.81
+
+crash_detection:
+  acceleration_threshold_g: 4.5
+  jerk_threshold: 25.0       # g/s
+  gyro_threshold: 2.5        # rad/s
+  confidence_threshold: 0.70 # Minimum confidence for CRASH_DETECTED
+  window_seconds: 0.5        # Rolling window duration (seconds)
+  weights:
+    acceleration: 0.50
+    jerk: 0.30
+    gyro: 0.20
+
+output:
+  events_jsonl_path: "member1/outputs/events.jsonl"
+  shared_events_jsonl_path: "shared/outputs/events.jsonl"
+  plot_path: "member1/outputs/crash_sensor_plot.png"
+  ground_truth_path: "member1/outputs/ground_truth.json"
+  api_endpoint: "http://127.0.0.1:8000/events/crash"
+  publish_to_api: true

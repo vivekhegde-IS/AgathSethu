@@ -1,0 +1,16 @@
+{
+  "ground_truth_id": "gt_col_001",
+  "event_type": "GROUND_TRUTH_COLLISION",
+  "crash_timestamp_sim": 102.43,
+  "junction_id": "J02",
+  "involved_vehicles": [
+    "V001",
+    "V002"
+  ],
+  "location": {
+    "x": 104.2,
+    "y": 52.7,
+    "z": 0.3
+  },
+  "simulation": true
+}

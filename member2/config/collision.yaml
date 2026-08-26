@@ -1,0 +1,16 @@
+collision_analysis:
+  time_window_seconds: 2.0
+  max_proximity_distance: 15.0
+  min_collision_score_threshold: 0.55
+
+weights:
+  spatial_proximity: 0.25
+  temporal_alignment: 0.20
+  trajectory_convergence: 0.25
+  velocity_change: 0.20
+  overlap: 0.10
+
+severity_thresholds:
+  HIGH: 0.80
+  MEDIUM: 0.60
+  LOW: 0.40

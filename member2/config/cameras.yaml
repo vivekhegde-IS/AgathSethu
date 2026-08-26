@@ -1,0 +1,32 @@
+cameras:
+  - camera_id: "CAM_J01_01"
+    junction_id: "J01"
+    resolution:
+      width: 1280
+      height: 720
+    fps: 15
+    location: [0.0, 0.0, 10.0]
+
+  - camera_id: "CAM_J02_01"
+    junction_id: "J02"
+    resolution:
+      width: 1280
+      height: 720
+    fps: 15
+    location: [100.0, 50.0, 12.0]
+
+  - camera_id: "CAM_J03_01"
+    junction_id: "J03"
+    resolution:
+      width: 1280
+      height: 720
+    fps: 15
+    location: [250.0, 50.0, 10.0]
+
+  - camera_id: "CAM_J04_01"
+    junction_id: "J04"
+    resolution:
+      width: 1280
+      height: 720
+    fps: 15
+    location: [400.0, 50.0, 10.0]

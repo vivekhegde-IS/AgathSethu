@@ -1,0 +1,312 @@
+/**
+ * Global Styles for AGHAT SETHU
+ * 
+ * Tailwind CSS directives and custom CSS for the application.
+ * Tailwind config is in tailwind.config.ts with AGHAT SETHU theme tokens.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Base Styles
+ */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-aghat-navy text-white font-sans;
+  }
+
+  h1 {
+    @apply text-4xl font-bold;
+  }
+
+  h2 {
+    @apply text-3xl font-bold;
+  }
+
+  h3 {
+    @apply text-2xl font-bold;
+  }
+
+  h4 {
+    @apply text-xl font-bold;
+  }
+
+  h5 {
+    @apply text-lg font-bold;
+  }
+
+  h6 {
+    @apply text-base font-bold;
+  }
+
+  p {
+    @apply text-base leading-relaxed;
+  }
+
+  a {
+    @apply text-aghat-blue hover:text-aghat-blue-light transition-colors duration-200;
+  }
+
+  button {
+    @apply transition-all duration-200;
+  }
+}
+
+/**
+ * Component Styles
+ */
+@layer components {
+  /* Page Container */
+  .page-container {
+    @apply min-h-screen w-full;
+  }
+
+  .page-content {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+  }
+
+  /* Cards */
+  .card {
+    @apply bg-aghat-navy-light rounded-lg p-6 border border-aghat-navy-lighter hover:border-aghat-blue-dark transition-colors duration-200 shadow-md;
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer hover:shadow-lg;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply btn bg-aghat-blue text-white hover:bg-aghat-blue-dark hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply btn bg-aghat-navy-lighter text-white border border-aghat-blue hover:bg-aghat-navy-light;
+  }
+
+  .btn-danger {
+    @apply btn bg-status-error text-white hover:bg-red-600;
+  }
+
+  .btn-success {
+    @apply btn bg-status-success text-white hover:bg-green-600;
+  }
+
+  .btn-small {
+    @apply btn px-3 py-1 text-sm;
+  }
+
+  .btn-large {
+    @apply btn px-6 py-3 text-lg;
+  }
+
+  /* Input Fields */
+  .input-field {
+    @apply w-full px-4 py-2 bg-aghat-navy-lighter border border-aghat-navy-lighter rounded-lg text-white placeholder-gray-400 transition-colors duration-200;
+  }
+
+  .input-field:focus {
+    @apply outline-none border-aghat-blue bg-aghat-navy-light;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+  }
+
+  .badge-primary {
+    @apply badge bg-aghat-blue text-white;
+  }
+
+  .badge-success {
+    @apply badge bg-status-success text-white;
+  }
+
+  .badge-warning {
+    @apply badge bg-status-warning text-white;
+  }
+
+  .badge-error {
+    @apply badge bg-status-error text-white;
+  }
+
+  /* Status Indicators */
+  .status-indicator {
+    @apply inline-flex items-center gap-2;
+  }
+
+  .status-dot {
+    @apply w-3 h-3 rounded-full;
+  }
+
+  .status-dot-active {
+    @apply status-dot bg-status-success animate-pulse;
+  }
+
+  .status-dot-inactive {
+    @apply status-dot bg-gray-500;
+  }
+
+  .status-dot-error {
+    @apply status-dot bg-status-error animate-pulse;
+  }
+
+  /* Tables */
+  .table-header {
+    @apply bg-aghat-navy-lighter border-b border-aghat-navy-lighter;
+  }
+
+  .table-row {
+    @apply border-b border-aghat-navy-lighter hover:bg-aghat-navy-lighter transition-colors duration-150;
+  }
+
+  .table-cell {
+    @apply px-6 py-4;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+  }
+
+  .modal-content {
+    @apply bg-aghat-navy-light rounded-lg shadow-xl max-w-md w-full mx-4;
+  }
+
+  /* Alerts */
+  .alert {
+    @apply p-4 rounded-lg border-l-4;
+  }
+
+  .alert-info {
+    @apply alert bg-blue-500 bg-opacity-10 border-aghat-blue text-aghat-blue-light;
+  }
+
+  .alert-success {
+    @apply alert bg-status-success bg-opacity-10 border-status-success text-status-success;
+  }
+
+  .alert-warning {
+    @apply alert bg-status-warning bg-opacity-10 border-status-warning text-status-warning;
+  }
+
+  .alert-error {
+    @apply alert bg-status-error bg-opacity-10 border-status-error text-status-error;
+  }
+
+  /* Spinners */
+  .spinner {
+    @apply inline-block animate-spin;
+  }
+
+  .spinner-sm {
+    @apply spinner w-4 h-4;
+  }
+
+  .spinner-md {
+    @apply spinner w-6 h-6;
+  }
+
+  .spinner-lg {
+    @apply spinner w-8 h-8;
+  }
+}
+
+/**
+ * Utility Styles
+ */
+@layer utilities {
+  /* Glassmorphism */
+  .glass {
+    @apply bg-white bg-opacity-10 backdrop-blur-md border border-white border-opacity-20;
+  }
+
+  /* Smooth Transitions */
+  .transition-smooth {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  /* Grid Layouts */
+  .grid-responsive {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6;
+  }
+
+  .grid-responsive-4 {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6;
+  }
+
+  /* Flex Centers */
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+
+  .flex-between {
+    @apply flex items-center justify-between;
+  }
+
+  /* Text Truncation */
+  .truncate-1 {
+    @apply truncate;
+  }
+
+  .truncate-2 {
+    @apply line-clamp-2;
+  }
+
+  .truncate-3 {
+    @apply line-clamp-3;
+  }
+
+  /* Scrollbar Styling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Focus Ring */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-aghat-blue focus:ring-offset-2 focus:ring-offset-aghat-navy;
+  }
+}
+
+/**
+ * Animations
+ */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(37, 99, 235, 0.8);
+  }
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/**
+ * Print Styles
+ */
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+
+  .no-print {
+    @apply hidden;
+  }
+}

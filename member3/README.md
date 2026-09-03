@@ -1,91 +1,196 @@
-# Member 3: Evidence Fusion, Backend API & Police Dashboard
+# Member 3 — AGHAT SETHU Traffic Safety Platform
 
-This directory contains the **Member 3** module for the **AI-Based Hit-and-Run Accident Detection, Vehicle Identification and Multi-Junction Tracking System**.
+## Overview
 
----
+Member 3 owns the **full-stack web application** for the AGHAT SETHU hit-and-run detection and traffic safety system. This includes:
 
-## 1. Responsibilities & Features
-
-Member 3 acts as the central integration, storage, decision-making, and command UI layer:
-
-- **Integration Adapters** (`member1_adapter.py`, `member2_adapter.py`): Ingests and normalizes external events (`CRASH_DETECTED`, `COLLISION_PAIR_IDENTIFIED`, `ANPR_IDENTIFIED`, `VEHICLE_OBSERVED`) without modifying upstream Member 1 or Member 2 code.
-- **Virtual RFID Simulator** (`rfid/simulator.py`): Simulates RFID reader checkpoints (`RFID_J03_R01` at `J03`), tag detection radius, cooldowns, duplicate suppression, and generates `RFID_DETECTED` events.
-- **Database Engine & Persistence** (`database/`): SQLAlchemy ORM models and DAO repository supporting PostgreSQL with transparent SQLite fallback (`hit_and_run.db`).
-- **Evidence Fusion Engine** (`fusion_engine.py`):
-  - Correlates multi-sensor evidence across junctions.
-  - Performs evidence-based suspect identification (`V002` fleeing post-crash).
-  - Reconstructs chronological route history (`J02 -> J03 -> J04`).
-  - Calculates last-known location (`J04`) sorted by simulation timestamp `timestamp_sim`.
-- **FastAPI Backend REST API** (`backend/`): RESTful endpoints for event ingestion, incident management, RFID scan triggers, and fusion workflows.
-- **Police Command Dashboard UI** (`dashboard/`): High-aesthetic glassmorphism web interface providing real-time hit-and-run alerts, multi-junction timeline maps, suspect details, evidence tables, and live event logs.
+- **Citizen Portal** — vehicle registration, violation tracking, payments, notifications
+- **Authority Tactical TOC** — live camera feeds, incident management, ANPR evidence, challan issuance
+- **FastAPI Backend** — PostgreSQL, JWT authentication, REST API
+- **Member Integrations** — frontend adapters for Member 1 (CARLA crash detection) and Member 2 (ANPR/vision pipeline)
 
 ---
 
-## 2. Directory Structure
+## Structure
 
-```text
+```
 member3/
-├── backend/
-│   ├── app.py           # FastAPI application
-│   ├── models.py        # Pydantic API schemas
-│   └── routes.py        # REST API endpoints
-├── config/
-│   └── config.py        # Member 3 config loader
-├── dashboard/
-│   ├── index.html       # Police Command Center Web UI
-│   └── static/
-│       ├── app.js       # Client script & REST API integration
-│       └── styles.css   # Modern dark-mode glassmorphic CSS
-├── database/
-│   ├── db.py            # SQLAlchemy engine & session lifecycle
-│   ├── models.py        # ORM models (Event, Incident, Evidence, VehicleHistory)
-│   └── repository.py    # Data Access Layer (DAO)
-├── integration/
-│   ├── event_ingestion.py # Ingestion pipeline manager
-│   ├── member1_adapter.py # Member 1 crash event adapter
-│   └── member2_adapter.py # Member 2 vision & ANPR event adapter
-├── rfid/
-│   └── simulator.py     # Virtual RFID checkpoint simulator
-├── scripts/
-│   └── seed_demo_data.py # Seeder script (EXPLICITLY LABELED DEMO DATA)
-├── tests/
-│   ├── test_adapters.py # Adapter validation tests
-│   ├── test_api.py      # FastAPI endpoints tests
-│   ├── test_database.py # Database ORM tests
-│   └── test_fusion.py   # Fusion engine tests
-├── database.py          # Database shim re-export
-├── fusion_engine.py     # Evidence Fusion Engine
-├── rfid_simulator.py    # RFID simulator shim re-export
-├── run_member3.py       # Main CLI entry point runner
-├── requirements.txt
+├── frontend/               # React 18 + TypeScript + Vite + Tailwind CSS
+│   ├── src/
+│   │   ├── api/            # Axios API client
+│   │   ├── components/     # Reusable UI components
+│   │   │   ├── auth/
+│   │   │   ├── authority/
+│   │   │   ├── citizen/
+│   │   │   ├── layout/
+│   │   │   ├── public/
+│   │   │   └── ui/
+│   │   ├── hooks/          # Custom React hooks
+│   │   ├── integrations/
+│   │   │   ├── member1/    # CARLA crash-detection adapter
+│   │   │   ├── member2/    # ANPR/vision adapter
+│   │   │   └── member3/    # RFID/FASTag adapter
+│   │   ├── pages/
+│   │   │   ├── authority/  # TOC dashboard pages
+│   │   │   ├── citizen/    # Citizen portal pages
+│   │   │   └── public/     # Public-facing pages
+│   │   ├── routes/         # React Router configuration
+│   │   ├── services/       # Auth guards, WebSocket
+│   │   ├── stores/         # Zustand state stores
+│   │   ├── theme/          # Design tokens
+│   │   ├── types/          # TypeScript interfaces
+│   │   └── utils/
+│   ├── public/
+│   │   └── evidence/       # Static evidence assets (served by Vite)
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tailwind.config.ts
+│   └── .env.example
+│
+├── backend/                # FastAPI + SQLAlchemy + Alembic + PostgreSQL
+│   ├── alembic/            # Database migrations
+│   ├── app/
+│   │   ├── core/           # config.py, database.py, security.py
+│   │   ├── dependencies/   # FastAPI dependency injection
+│   │   ├── models/         # SQLAlchemy ORM models
+│   │   ├── routers/        # API route handlers
+│   │   ├── schemas/        # Pydantic request/response schemas
+│   │   └── services/       # Business logic
+│   ├── requirements.txt
+│   ├── seed.py             # Demo data seeder
+│   └── .env.example
+│
+├── media/                  # Evidence media (excluded from git — too large)
+│   ├── evidence/           # Violation evidence videos
+│   └── videos/             # Camera recordings
+│
 └── README.md
 ```
 
 ---
 
-## 3. How to Run
+## Technology Stack
 
-### Setup Environment
+### Frontend
+| Technology | Version | Purpose |
+|---|---|---|
+| React | 18.3 | UI framework |
+| TypeScript | 5.3 | Type safety |
+| Vite | 5.0 | Build tool & dev server |
+| Tailwind CSS | 3.4 | Utility-first styling |
+| React Router | 6.20 | Client-side routing |
+| Zustand | 4.4 | State management |
+| Axios | 1.6 | HTTP client |
+
+### Backend
+| Technology | Version | Purpose |
+|---|---|---|
+| FastAPI | 0.115 | REST API framework |
+| SQLAlchemy | 2.0 | ORM |
+| Alembic | 1.13 | Database migrations |
+| psycopg (v3) | 3.3 | PostgreSQL driver |
+| passlib + bcrypt | 1.7 / 4.2 | Password hashing |
+| python-jose | 3.3 | JWT tokens |
+| Pydantic | 2.9 | Data validation |
+
+### Database
+- **PostgreSQL 18** (locally installed)
+- Database name: `Aghat_Sethu`
+- Connection: `postgresql+psycopg://postgres:PASSWORD@localhost:5432/Aghat_Sethu`
+
+---
+
+## Quick Start
+
+### 1. Backend
+
 ```bash
-pip install -r member3/requirements.txt
+cd member3/backend
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install -r requirements.txt
+
+# Configure environment
+copy .env.example .env
+# Edit .env with your PostgreSQL password and JWT secret
+
+# Run migrations
+python -m alembic upgrade head
+
+# Seed demo data
+python seed.py
+
+# Start API server
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### Run Member 3 Pipeline & Web Server
+API docs: http://localhost:8000/docs
+
+### 2. Frontend
+
 ```bash
-python member3/run_member3.py --mode DEMO
+cd member3/frontend
+npm install
+
+# Configure environment
+copy .env.example .env
+# Edit .env if needed (defaults work for local dev)
+
+npm run dev
 ```
 
-Access the Police Dashboard UI in browser:
-```text
-http://127.0.0.1:8000
+App: http://localhost:5173
+
+---
+
+## Demo Credentials
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@trafficops.blr.gov.in` | `Admin@Dev2026` |
+| Authority Inspector | `inspector.vikram@trafficops.blr.gov.in` | `Authority@Dev2026` |
+| Citizen | `aarav.sharma@example.com` | `Citizen@Dev2026` |
+
+---
+
+## Member Integrations
+
+Member 3 integrates with Member 1 and Member 2 via **frontend adapter contracts** located at:
+
+```
+frontend/src/integrations/
+├── member1/    # Reads CARLA crash-detection events
+├── member2/    # Reads ANPR + collision detection events
+└── member3/    # RFID/FASTag sensor-fusion adapter
 ```
 
-Access API Documentation:
-```text
-http://127.0.0.1:8000/docs
+These adapters support both **mock mode** (demo) and **real mode** (live member services).
+
+Set in `frontend/.env`:
+```env
+VITE_ENABLE_MOCK_DATA=true   # false = connect to real member services
+VITE_ENABLE_REAL_AUTH=true   # false = mock authentication
 ```
 
-### Run Unit Tests
-```bash
-pytest member3/tests
+---
+
+## Media Files
+
+Large video files (`*.mp4`) are excluded from git due to GitHub's file size limits.
+
+Place them locally at:
 ```
+member3/media/evidence/violation_video.mp4
+member3/media/videos/camera_junction_1_v22_final_visible_anpr_recording.mp4
+```
+
+The frontend serves evidence videos from `frontend/public/evidence/`.
+
+---
+
+## Notes
+
+- Do **not** commit `.env` files (they contain real database passwords and JWT secrets)
+- Do **not** commit `node_modules/` or `dist/`
+- The `alembic/versions/` migration files **must** be committed — they define the schema

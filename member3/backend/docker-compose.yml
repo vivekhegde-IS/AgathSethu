@@ -1,0 +1,34 @@
+# AGHAT SETHU — Docker Compose for Local Development
+# Provides PostgreSQL without manual installation.
+#
+# Usage:
+#   docker compose up -d         # start PostgreSQL in background
+#   docker compose down          # stop
+#   docker compose down -v       # stop and delete data volume
+#
+# After starting: run alembic upgrade head to create tables.
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aghat_sethu_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: aghat_dev_password
+      POSTGRES_DB: aghat_sethu
+    ports:
+      - "5432:5432"
+    volumes:
+      - aghat_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aghat_sethu"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  aghat_postgres_data:
+    name: aghat_sethu_postgres_data

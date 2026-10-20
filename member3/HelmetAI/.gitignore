@@ -1,0 +1,35 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime uploads and generated outputs
+static/uploads/*
+!static/uploads/.gitkeep
+runs/
+
+# Local datasets and generated labeling artifacts
+train/
+valid/
+mixed_images/
+v1generated_labels/
+v1generated_preview/
+v2_labels/
+v2_preview/
+v2_review/
+v3_labels/
+v3_preview/
+v3_review/
+v4_head_crops/
+v4_labels/
+v4_preview/
+v4_review/
+*.zip
+
+# Unused base training checkpoint
+/yolo11n.pt
+
+# Auto-labeling scripts are not required by the inference website
+auto_label*.py

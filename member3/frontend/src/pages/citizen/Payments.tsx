@@ -1,82 +1,65 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { useViolationStore } from '@stores/violationStore'
-import { Card, Table, Button, Column } from '@components/ui'
+import { Button, Card, Spinner } from '@components/ui'
+import { rupees, useMyFines } from '@components/citizen/FinesTable'
+import { PaymentHistory } from '@components/citizen/PaymentHistory'
+import { formatIstDate } from '@api/portal'
 
+/** Pay Fines: the citizen's unpaid challans (real) and their payment history. */
 export const CitizenPayments: React.FC = () => {
-  const { violations } = useViolationStore()
-
-  const pending = violations.filter((v) => v.status !== 'PAID')
-  const totalPending = pending.reduce((sum, v) => sum + v.fineAmount, 0)
-
-  const columns: Column<(typeof pending)[0]>[] = [
-    {
-      header: 'CHALLAN #',
-      cell: (row) => <span className="font-mono font-semibold text-cyan-400">{row.violation_id}</span>,
-    },
-    {
-      header: 'VEHICLE',
-      cell: (row) => <span className="font-mono font-bold text-white">{row.license_plate}</span>,
-    },
-    {
-      header: 'OFFENCE',
-      cell: (row) => (
-        <div>
-          <p className="font-semibold text-white">{row.violation_type}</p>
-          <p className="text-[10px] text-slate-400 font-mono">{row.location}</p>
-        </div>
-      ),
-    },
-    {
-      header: 'FINE AMOUNT',
-      cell: (row) => <span className="font-mono font-bold text-red-400 text-sm">₹{row.fineAmount}</span>,
-    },
-    {
-      header: 'ACTION',
-      className: 'text-right',
-      cell: (row) => (
-        <Link to={`/citizen/payments/${row.violation_id}`}>
-          <Button variant="danger" size="sm">
-            Pay Now →
-          </Button>
-        </Link>
-      ),
-    },
-  ]
+  const { data, error, reload } = useMyFines()
+  const unpaid = (data?.fines ?? []).filter((f) => f.status !== 'Paid')
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold font-mono text-white">Challan Payment Gateway</h2>
-          <p className="text-xs text-slate-400 font-mono">
-            Settle electronic traffic violation penalties instantly via UPI, NetBanking, or Cards.
-          </p>
+          <h2 className="text-2xl font-semibold text-blue-950">Pay Fines</h2>
+          <p className="text-sm text-slate-600">Unpaid e-challans on your registered vehicles.</p>
         </div>
-
-        <div className="p-3 bg-red-950/40 border border-red-800 rounded flex items-center gap-3">
-          <span className="text-xs font-mono text-slate-300">Total Pending:</span>
-          <span className="text-base font-bold font-mono text-red-400">₹{totalPending}</span>
-        </div>
+        <Button variant="secondary" size="sm" onClick={reload}>
+          Refresh
+        </Button>
       </div>
 
-      <Card title="Unpaid Challans">
-        {pending.length === 0 ? (
-          <div className="p-10 text-center space-y-2">
-            <span className="text-2xl">🎉</span>
-            <p className="text-sm font-mono text-emerald-400 font-semibold">All Challans Clear!</p>
-            <p className="text-xs text-slate-400 font-mono">
-              There are no outstanding traffic penalties registered under your account.
-            </p>
-          </div>
+      {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{error}</div>}
+
+      <Card title={data ? `Unpaid challans (${unpaid.length}) · ${rupees(data.total_unpaid)}` : 'Unpaid challans'}>
+        {!data && !error ? (
+          <Spinner />
+        ) : unpaid.length === 0 ? (
+          <p className="p-6 text-center text-slate-600 font-mono text-xs">You have no unpaid fines.</p>
         ) : (
-          <Table
-            columns={columns}
-            data={pending}
-            keyExtractor={(row) => row.violation_id}
-          />
+          <ul className="divide-y divide-slate-200">
+            {unpaid.map((fine) => (
+              <li key={fine.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {fine.violation_type} · <span className="font-mono">{fine.number_plate}</span>
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    Challan #{fine.id} · issued {formatIstDate(fine.detected_at)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-bold text-slate-900">{rupees(fine.fine_amount)}</span>
+                  <Link to={`/citizen/payments/${fine.id}`}>
+                    <Button variant="primary" size="sm">
+                      Pay now
+                    </Button>
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
+
+      <section id="history">
+        <Card title="Payment history">
+          <PaymentHistory />
+        </Card>
+      </section>
     </div>
   )
 }

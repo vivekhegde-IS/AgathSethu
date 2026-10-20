@@ -21,26 +21,26 @@ export const Badge: React.FC<BadgeProps> = ({
   }[size]
 
   const variantClasses = {
-    success: 'bg-emerald-950/70 text-emerald-300 border-emerald-800/60',
-    warning: 'bg-amber-950/70 text-amber-300 border-amber-800/60',
-    danger: 'bg-red-950/70 text-red-300 border-red-800/60',
-    info: 'bg-blue-950/70 text-blue-300 border-blue-800/60',
-    muted: 'bg-slate-900/80 text-slate-400 border-slate-700',
-    brand: 'bg-indigo-950/70 text-indigo-300 border-indigo-800/60',
+    success: 'bg-green-50 text-green-800 border-green-300',
+    warning: 'bg-amber-50 text-amber-800 border-amber-300',
+    danger: 'bg-red-50 text-red-800 border-red-300',
+    info: 'bg-blue-50 text-blue-800 border-blue-300',
+    muted: 'bg-slate-100 text-slate-700 border-slate-300',
+    brand: 'bg-indigo-50 text-indigo-800 border-indigo-300',
   }[variant]
 
   const dotColors = {
-    success: 'bg-emerald-400',
-    warning: 'bg-amber-400',
-    danger: 'bg-red-400',
-    info: 'bg-blue-400',
+    success: 'bg-green-600',
+    warning: 'bg-amber-500',
+    danger: 'bg-red-600',
+    info: 'bg-blue-600',
     muted: 'bg-slate-400',
     brand: 'bg-indigo-400',
   }[variant]
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-mono font-medium border tracking-wider uppercase ${sizeClasses} ${variantClasses} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full font-medium border tracking-wide ${sizeClasses} ${variantClasses} ${className}`}
     >
       {dot && <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${dotColors}`} />}
       {children}

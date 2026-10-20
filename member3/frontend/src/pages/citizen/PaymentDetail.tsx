@@ -1,156 +1,120 @@
 import React, { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { useViolationStore } from '@stores/violationStore'
-import { Card, Button, Input } from '@components/ui'
+import { Link, useParams } from 'react-router-dom'
+import { Button, Card, Select, Spinner } from '@components/ui'
+import { rupees, useMyFines } from '@components/citizen/FinesTable'
+import { errorMessage, formatIst, formatIstDate, payFine } from '@api/portal'
 
+type Method = 'upi' | 'card' | 'netbanking'
+
+/**
+ * Pay one fine. The payment gateway is simulated; the backend records the
+ * payment and marks the fine Paid, so it shows as paid everywhere.
+ */
 export const CitizenPaymentDetail: React.FC = () => {
   const { paymentId } = useParams<{ paymentId: string }>()
-  const { violations, payViolationFine } = useViolationStore()
+  const { data, error: loadError, reload } = useMyFines()
+  const [method, setMethod] = useState<Method>('upi')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [receipt, setReceipt] = useState<{ reference: string; paid_at: string | null; amount: number } | null>(null)
 
-  const violation = violations.find((v) => v.violation_id === paymentId) || violations[0]
-  const [method, setMethod] = useState<'upi' | 'card' | 'netbanking'>('upi')
-  const [upiId, setUpiId] = useState('aarav@okaxis')
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [successTxId, setSuccessTxId] = useState<string | null>(null)
+  const fine = data?.fines.find((f) => String(f.id) === paymentId)
 
-  const handlePay = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsProcessing(true)
-    setTimeout(async () => {
-      const txId = await payViolationFine(violation.violation_id, method)
-      setIsProcessing(false)
-      setSuccessTxId(txId)
-    }, 1200)
+  const pay = async () => {
+    if (!fine) return
+    setBusy(true)
+    setError('')
+    try {
+      const result = await payFine(fine.id, method)
+      setReceipt(result.payment)
+      reload()
+    } catch (err) {
+      setError(errorMessage(err, 'The payment could not be recorded.'))
+    } finally {
+      setBusy(false)
+    }
   }
 
-  if (successTxId) {
+  if (loadError) return <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{loadError}</div>
+  if (!data) return <Spinner />
+  if (!fine) {
     return (
-      <div className="max-w-md mx-auto py-12">
-        <Card glow className="text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-emerald-950 border border-emerald-500 text-emerald-400 text-3xl flex items-center justify-center mx-auto shadow-glow">
-            ✓
-          </div>
-          <h2 className="text-xl font-bold font-mono text-white">Payment Successful</h2>
-          <p className="text-xs text-slate-300 font-mono">
-            Transaction ID: <strong className="text-cyan-300">{successTxId}</strong>
-          </p>
-          <div className="p-4 bg-[#121820] rounded border border-slate-800 text-xs font-mono text-left space-y-1">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Challan ID:</span>
-              <span className="text-white">{violation.violation_id}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Amount Paid:</span>
-              <span className="text-emerald-400 font-bold">₹{violation.fineAmount}.00</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Time:</span>
-              <span className="text-slate-300">{new Date().toLocaleString()}</span>
-            </div>
-          </div>
-          <div className="pt-3 flex items-center justify-center gap-3">
-            <Link to="/citizen/receipts">
-              <Button variant="primary" size="sm">
-                View Receipt
-              </Button>
-            </Link>
-            <Link to="/citizen/dashboard">
-              <Button variant="secondary" size="sm">
-                Dashboard
-              </Button>
-            </Link>
-          </div>
-        </Card>
-      </div>
+      <Card title="Challan not found">
+        <p className="text-sm text-slate-600">This challan does not exist on your account.</p>
+        <Link to="/citizen/payments" className="text-xs text-blue-800 hover:underline">
+          ← Back to Pay Fines
+        </Link>
+      </Card>
     )
   }
 
+  const paid = receipt ?? fine.payment
+
   return (
-    <div className="max-w-xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold font-mono text-white">Electronic Fine Settlement</h2>
-          <p className="text-xs text-slate-400 font-mono">Secured e-Challan Payment Gateway</p>
-        </div>
-        <Link to="/citizen/payments">
-          <Button variant="secondary" size="sm">
-            ← Back
-          </Button>
-        </Link>
-      </div>
+    <div className="max-w-xl space-y-6">
+      <Link to="/citizen/payments" className="text-xs font-mono text-blue-800 hover:underline">
+        ← Back to Pay Fines
+      </Link>
 
-      <Card title="Challan Summary" glow>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div>
-              <span className="text-xs font-mono text-cyan-400 font-semibold">{violation.violation_id}</span>
-              <p className="text-sm font-bold text-white mt-0.5">{violation.violation_type}</p>
-              <p className="text-xs text-slate-400">{violation.location}</p>
-            </div>
-            <div className="text-right">
-              <span className="text-xs font-mono text-slate-400 block">Total Due</span>
-              <span className="text-2xl font-mono font-bold text-red-400">₹{violation.fineAmount}</span>
-            </div>
+      <Card title={`Challan #${fine.id}`}>
+        <dl className="grid grid-cols-2 gap-y-2 text-sm">
+          <dt className="text-slate-600">Vehicle</dt>
+          <dd className="font-mono font-semibold text-slate-900">{fine.number_plate}</dd>
+          <dt className="text-slate-600">Violation</dt>
+          <dd className="text-slate-900">{fine.violation_type}</dd>
+          <dt className="text-slate-600">Issued</dt>
+          <dd className="text-slate-900">{formatIstDate(fine.detected_at)}</dd>
+          <dt className="text-slate-600">Amount</dt>
+          <dd className="font-mono font-bold text-slate-900">{rupees(fine.fine_amount)}</dd>
+          <dt className="text-slate-600">Status</dt>
+          <dd className={fine.status === 'Paid' || receipt ? 'text-emerald-700' : 'text-red-700'}>
+            {receipt ? 'Paid' : fine.status}
+          </dd>
+        </dl>
+      </Card>
+
+      {paid ? (
+        <Card title="Payment receipt">
+          <div role="status" className="space-y-1 text-sm">
+            <p className="text-emerald-700 font-semibold">Payment recorded.</p>
+            <p className="text-slate-700">
+              Receipt no. <span className="font-mono text-slate-900">{paid.reference}</span>
+            </p>
+            <p className="text-slate-600 text-xs">
+              {rupees(paid.amount)} paid on {formatIst(paid.paid_at)}
+            </p>
+            <Link to="/citizen/receipts" className="text-xs text-blue-800 hover:underline">
+              View payment history →
+            </Link>
           </div>
-
-          <form onSubmit={handlePay} className="space-y-4 pt-2">
-            <label className="block text-xs font-mono font-semibold text-slate-300 uppercase">
-              Select Payment Method
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { id: 'upi', label: 'UPI / QR', icon: '📱' },
-                { id: 'card', label: 'Debit / Credit', icon: '💳' },
-                { id: 'netbanking', label: 'NetBanking', icon: '🏦' },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMethod(m.id as 'upi' | 'card' | 'netbanking')}
-                  className={`p-3 rounded border text-center font-mono text-xs transition-all ${
-                    method === m.id
-                      ? 'border-aghat-blue bg-blue-950/40 text-cyan-300 font-bold shadow-glow'
-                      : 'border-slate-800 bg-[#121820] text-slate-400 hover:border-slate-700'
-                  }`}
-                >
-                  <span className="text-lg block mb-1">{m.icon}</span>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            {method === 'upi' && (
-              <Input
-                label="Virtual Payment Address (VPA / UPI ID)"
-                value={upiId}
-                onChange={(e) => setUpiId(e.target.value)}
-                placeholder="username@bank"
-                required
-              />
-            )}
-
-            {method === 'card' && (
-              <div className="space-y-3">
-                <Input label="Card Number" placeholder="4532 •••• •••• 8821" required />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input label="Expiry (MM/YY)" placeholder="08/29" required />
-                  <Input label="CVV" placeholder="•••" type="password" required />
-                </div>
+        </Card>
+      ) : (
+        <Card title="Pay this fine">
+          <div className="space-y-4">
+            {error && (
+              <div role="alert" className="p-2 rounded border border-red-200 bg-red-50 text-xs text-red-700">
+                {error}
               </div>
             )}
-
-            <Button
-              type="submit"
-              variant="danger"
-              size="lg"
-              className="w-full mt-4"
-              isLoading={isProcessing}
-            >
-              Pay ₹{violation.fineAmount} Now
+            <Select
+              label="Payment method"
+              value={method}
+              onChange={(e) => setMethod(e.target.value as Method)}
+              options={[
+                { value: 'upi', label: 'UPI' },
+                { value: 'card', label: 'Debit / credit card' },
+                { value: 'netbanking', label: 'Net banking' },
+              ]}
+            />
+            <p className="text-[11px] text-slate-500">
+              Payment gateway is simulated in this version; the payment and its receipt are recorded on your account.
+            </p>
+            <Button variant="primary" onClick={pay} isLoading={busy} className="w-full">
+              Pay {rupees(fine.fine_amount)}
             </Button>
-          </form>
-        </div>
-      </Card>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

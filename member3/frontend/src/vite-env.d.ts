@@ -15,8 +15,12 @@ interface ImportMetaEnv {
   readonly VITE_MEMBER_1_BASE_URL: string
   readonly VITE_MEMBER_2_BASE_URL: string
   readonly VITE_MEMBER_3_BASE_URL: string
+  readonly VITE_LIVE_CAMERA_WS_URL: string
 }
 
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Build date (YYYY-MM-DD), injected by vite.config.ts */
+declare const __APP_LAST_UPDATED__: string

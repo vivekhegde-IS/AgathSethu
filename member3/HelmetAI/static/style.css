@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+    --ink: #17221e;
+    --muted: #6b7771;
+    --paper: #f3f5ef;
+    --panel: #ffffff;
+    --line: #d9dfd4;
+    --green: #1c794f;
+    --green-soft: #dcefe3;
+    --red: #b53b32;
+    --red-soft: #f7dfda;
+    --gold: #c18a25;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    background: radial-gradient(circle at 15% 10%, #ffffff 0, transparent 30%), linear-gradient(135deg, #eef2e8 0%, #f8f7f1 52%, #e7eee7 100%);
+}
+
+.shell { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 58px 0 80px; }
+.hero { max-width: 730px; margin-bottom: 32px; }
+.eyebrow { margin: 0 0 9px; color: var(--green); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+h1, h2 { font-family: 'Space Grotesk', sans-serif; letter-spacing: 0; }
+h1 { margin: 0; font-size: clamp(3.5rem, 9vw, 7.8rem); line-height: 0.88; }
+h2 { margin: 0; font-size: 1.45rem; }
+.intro { max-width: 560px; margin: 23px 0 0; color: var(--muted); font-size: 1.08rem; line-height: 1.6; }
+
+.upload-panel, .media-panel, .summary-panel { background: rgba(255, 255, 255, 0.88); border: 1px solid var(--line); box-shadow: 0 18px 45px rgba(34, 55, 42, 0.08); }
+.upload-panel { padding: 24px; }
+form { display: flex; gap: 14px; align-items: stretch; }
+.dropzone { min-height: 142px; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1.5px dashed #aebcaf; background: #f8faf5; cursor: pointer; transition: border-color 160ms ease, background 160ms ease; }
+.dropzone:hover { border-color: var(--green); background: var(--green-soft); }
+.drop-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 9px; border: 1px solid var(--green); border-radius: 50%; color: var(--green); font-size: 1.35rem; }
+.drop-title { font-weight: 700; }
+.drop-help, .gpu-note, .summary-footnote { color: var(--muted); font-size: 0.82rem; }
+.drop-help { margin-top: 5px; }
+input[type='file'] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+button { align-self: center; border: 0; padding: 15px 22px; background: var(--ink); color: white; font: inherit; font-weight: 700; cursor: pointer; }
+button:hover { background: var(--green); }
+.gpu-note { margin: 14px 0 0; }
+.alert { margin-top: 22px; padding: 14px 17px; border-left: 4px solid var(--red); background: var(--red-soft); color: #7d2d27; font-weight: 600; }
+
+.result-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(270px, 0.7fr); gap: 20px; margin-top: 28px; align-items: start; }
+.media-panel, .summary-panel { padding: 22px; }
+.section-heading { margin-bottom: 17px; }
+.result-media { display: block; width: 100%; max-height: 680px; object-fit: contain; background: #111813; }
+.summary-panel { position: sticky; top: 22px; }
+.status { margin: 16px 0 22px; padding: 12px; font-size: 1rem; line-height: 1.25; }
+.status.clear { background: var(--green-soft); color: var(--green); }
+.status.violation { background: var(--red-soft); color: var(--red); }
+.stats { margin: 0; }
+.stats div { display: flex; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.stats dt { color: var(--muted); }
+.stats dd { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; font-weight: 700; }
+.summary-footnote { margin: 19px 0 0; line-height: 1.5; }
+.violation-list { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.violation-plate { margin: 10px 0 0; padding: 12px; background: var(--red-soft); color: var(--red); line-height: 1.55; }
+
+@media (max-width: 760px) {
+    .shell { width: min(100% - 24px, 620px); padding-top: 35px; }
+    h1 { font-size: 4.5rem; }
+    form, .result-layout { display: block; }
+    button { width: 100%; margin-top: 12px; }
+    .summary-panel { position: static; margin-top: 14px; }
+}

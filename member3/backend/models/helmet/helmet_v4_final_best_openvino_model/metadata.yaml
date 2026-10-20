@@ -1,0 +1,28 @@
+description: Ultralytics YOLO11n model trained on data.yaml
+author: Ultralytics
+date: '2026-09-30T10:08:32.221837+05:30'
+version: 8.4.138
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+head: Detect
+batch: 1
+imgsz:
+- 576
+- 576
+names:
+  0: Number Plate
+  1: Rider
+  2: With Helmet
+  3: Without Helmet
+  4: Motorcycle
+args:
+  data: null
+  batch: 1
+  fraction: 1.0
+  quantize: null
+  dynamic: false
+  nms: false
+channels: 3
+end2end: false

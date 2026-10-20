@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "created_at": "2026-10-09T17:58:23+00:00",
+  "source": "synthetic: tools/netra_sim.py random_traffic (rfid_reader_model v2 + projected camera boxes); not real hardware",
+  "alpha": 0.02,
+  "delta": 0.1,
+  "threshold": 0.9133562578857575,
+  "engine": {
+    "slot": 0.5,
+    "rho0": 0.001,
+    "pass_gap": 20.0,
+    "max_pass": 30.0,
+    "window": 20.0,
+    "pad": 2.0,
+    "p_undetected": 0.05,
+    "p_static": 0.01,
+    "phantom_speeds": [
+      3.0,
+      5.5,
+      8.0,
+      10.5,
+      13.0,
+      15.5,
+      18.0,
+      20.5,
+      23.0,
+      25.5
+    ],
+    "phantom_shifts": [
+      -1.0,
+      -0.5,
+      0.0,
+      0.5,
+      1.0
+    ]
+  },
+  "readers": {
+    "J01": {
+      "reader_id": "RFID_J01_01",
+      "cx": 35.0,
+      "cy": 6.0,
+      "w": [
+        2.2459357578021564,
+        0.0070112227560922835,
+        0.11579544968756812,
+        -2.21413012606701,
+        -2.4367066273555107,
+        -0.08339691354897924,
+        -0.07892725168121813
+      ],
+      "tau": 0.0,
+      "link": "rate"
+    },
+    "J02": {
+      "reader_id": "RFID_J02_01",
+      "cx": 25.0,
+      "cy": 6.0,
+      "w": [
+        2.2460653087708025,
+        0.03719838570494268,
+        -0.14174860202597106,
+        -2.1686350925972344,
+        -2.3017596651501324,
+        0.13161942730171253,
+        -0.11558971489603724
+      ],
+      "tau": 0.0,
+      "link": "rate"
+    },
+    "J03": {
+      "reader_id": "RFID_J03_01",
+      "cx": 25.0,
+      "cy": -8.0,
+      "w": [
+        2.348412340481024,
+        0.24591770776550081,
+        0.24787824802988684,
+        -2.4334114366945907,
+        -2.211794352133608,
+        -0.47860338467911795,
+        -0.30262810750602887
+      ],
+      "tau": 0.0,
+      "link": "rate"
+    }
+  },
+  "cal_seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106
+  ],
+  "test_seeds": [
+    201,
+    202,
+    203
+  ],
+  "duration_s": 300.0,
+  "report": {
+    "calibration_accept_all": {
+      "n": 1274,
+      "accuracy": 0.843,
+      "coverage": 0.7143,
+      "error": 0.0487,
+      "sel_error": 0.0681,
+      "confirmed": 910,
+      "wrong": 62
+    },
+    "calibration_certified": {
+      "n": 1274,
+      "accuracy": 0.6743,
+      "coverage": 0.4882,
+      "error": 0.0024,
+      "sel_error": 0.0048,
+      "confirmed": 622,
+      "wrong": 3
+    },
+    "test_accept_all": {
+      "n": 649,
+      "accuracy": 0.8459,
+      "coverage": 0.7458,
+      "error": 0.0586,
+      "sel_error": 0.0785,
+      "confirmed": 484,
+      "wrong": 38
+    },
+    "test_certified": {
+      "n": 649,
+      "accuracy": 0.6579,
+      "coverage": 0.4977,
+      "error": 0.0046,
+      "sel_error": 0.0093,
+      "confirmed": 323,
+      "wrong": 3
+    },
+    "test_installer_guess_accept_all": {
+      "n": 649,
+      "accuracy": 0.8243,
+      "coverage": 0.7365,
+      "error": 0.0709,
+      "sel_error": 0.0962,
+      "confirmed": 478,
+      "wrong": 46
+    },
+    "test_certified_by_junction": {
+      "J01": {
+        "n": 215,
+        "accuracy": 0.7116,
+        "coverage": 0.6093,
+        "error": 0.0047,
+        "sel_error": 0.0076,
+        "confirmed": 131,
+        "wrong": 1
+      },
+      "J02": {
+        "n": 213,
+        "accuracy": 0.7136,
+        "coverage": 0.554,
+        "error": 0.0047,
+        "sel_error": 0.0085,
+        "confirmed": 118,
+        "wrong": 1
+      },
+      "J03": {
+        "n": 221,
+        "accuracy": 0.552,
+        "coverage": 0.3348,
+        "error": 0.0045,
+        "sel_error": 0.0135,
+        "confirmed": 74,
+        "wrong": 1
+      }
+    }
+  }
+}

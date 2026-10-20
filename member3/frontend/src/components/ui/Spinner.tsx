@@ -20,8 +20,8 @@ export const Spinner: React.FC<SpinnerProps> = ({
   }[size]
 
   const colorClasses = {
-    primary: 'text-aghat-blue',
-    cyan: 'text-cyan-400',
+    primary: 'text-blue-900',
+    cyan: 'text-blue-700',
     white: 'text-white',
   }[color]
 
@@ -40,7 +40,7 @@ export const Spinner: React.FC<SpinnerProps> = ({
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
         />
       </svg>
-      {label && <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">{label}</span>}
+      {label && <span className="text-xs text-slate-600">{label}</span>}
     </div>
   )
 }

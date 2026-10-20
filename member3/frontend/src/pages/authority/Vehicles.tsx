@@ -42,13 +42,13 @@ export const VehicleSearch: React.FC = () => {
   const columns: Column<(typeof allVehicles)[0]>[] = [
     {
       header: 'REGISTRATION #',
-      cell: (row) => <span className="font-mono font-bold text-white text-xs">{row.registrationNumber}</span>,
+      cell: (row) => <span className="font-mono font-bold text-slate-900 text-xs">{row.registrationNumber}</span>,
     },
     {
       header: 'MODEL & TYPE',
       cell: (row) => (
         <div>
-          <p className="text-white text-xs">{row.model}</p>
+          <p className="text-slate-900 text-xs">{row.model}</p>
           <Badge variant="info" size="sm">
             {row.vehicleType.toUpperCase()}
           </Badge>
@@ -57,14 +57,14 @@ export const VehicleSearch: React.FC = () => {
     },
     {
       header: 'FASTAG RFID TRANSPONDER',
-      cell: (row) => <span className="font-mono text-cyan-300 text-xs">{row.rfidTag}</span>,
+      cell: (row) => <span className="font-mono text-blue-800 text-xs">{row.rfidTag}</span>,
     },
     {
       header: 'ACTIVE VIOLATIONS',
       cell: (row) => (
         <span
           className={`font-mono text-xs font-bold ${
-            row.activeViolationsCount > 0 ? 'text-red-400' : 'text-emerald-400'
+            row.activeViolationsCount > 0 ? 'text-red-700' : 'text-emerald-700'
           }`}
         >
           {row.activeViolationsCount} Violations
@@ -88,8 +88,8 @@ export const VehicleSearch: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold font-mono text-white">Vehicle Intelligence Registry</h2>
-          <p className="text-xs text-slate-400 font-mono">
+          <h2 className="text-2xl font-semibold text-blue-950">Vehicle Intelligence Registry</h2>
+          <p className="text-sm text-slate-600">
             Query vehicles by number plate, FASTag EPC RFID tag, or chassis identification.
           </p>
         </div>

@@ -97,3 +97,23 @@ member3/backend/alembic/__pycache__/
 *.patch
 *.cache
 .cache/
+
+# --- Citizen fines (plaintext test passwords + violation snapshots/clips) ---
+member3/backend/data/citizen_credentials.csv
+member3/backend/static/violations/
+
+# --- Media server secrets ---
+member3/media-server/.env
+member3/media-server/mediamtx.exe
+
+# real-world datasets (raw downloads, not in git)
+realdata/raw/
+
+# --- Generated at runtime / build ---
+member3/backend/runtime/
+runtime/
+member3/backend/models/openvino_cache/
+member3/HelmetAI/static/uploads/
+*.tsbuildinfo
+*.env.bak
+.freebuff/

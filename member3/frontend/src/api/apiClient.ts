@@ -1,7 +1,7 @@
 /**
  * AGHAT SETHU — Centralized Axios API Client
  *
- * Base URL: VITE_API_BASE_URL (e.g., http://localhost:8000/api)
+ * Base URL: VITE_API_BASE_URL (e.g., http://localhost:8001/api)
  *
  * Attaches JWT from localStorage to every authenticated request.
  * Uses a plain localStorage read — no import from authStore —
@@ -59,6 +59,10 @@ export function clearToken(): void {
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
+}
+
+export function getApiBaseUrl(): string {
+  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 }
 
 export default apiClient

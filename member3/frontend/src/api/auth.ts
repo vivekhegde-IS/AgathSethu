@@ -4,7 +4,7 @@
  * Thin wrappers around the centralized apiClient.
  * All auth HTTP calls go through here — NOT scattered in components.
  *
- * Backend base: VITE_API_BASE_URL = http://localhost:8000/api
+ * Backend base: VITE_API_BASE_URL = http://localhost:8001/api
  * Endpoints:
  *   POST /auth/register/citizen
  *   POST /auth/register/authority

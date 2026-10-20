@@ -1,0 +1,149 @@
+# ============================================================================
+# HELMETAI - HELMET VIOLATION DETECTION WITH YOLO V4
+# ============================================================================
+# 
+# This project detects helmet violations using YOLOv8 trained model with:
+# - Real-time inference on images/videos
+# - Number plate OCR using RapidOCR
+# - Motorcycle & rider association logic
+# - GPU support via CUDA (falls back to CPU)
+# - Flask web interface for easy deployment
+#
+# Python Version: 3.14+ (validated environment)
+# ============================================================================
+
+# PYTHON COMPATIBILITY
+# RapidOCR 1.4.4 declares older Python range but works with Python 3.14+
+# If needed for the standalone Python 3.14 setup, pass --ignore-requires-python
+# on the pip command line; it is not valid as a requirements-file entry.
+
+# ============================================================================
+# CORE DEPENDENCIES
+# ============================================================================
+
+# Web Framework for Flask server
+Flask==3.1.3
+
+# Numerical computing for detection processing
+numpy==2.5.2
+
+# Computer vision library for image processing and manipulation
+opencv-python==5.0.0.93
+
+# YOLO model inference framework (ultralytics YOLOv8)
+ultralytics==8.4.138
+
+# OCR for number plate text extraction from cropped regions
+rapidocr_onnxruntime==1.4.4
+
+# Polygon clipping library (dependency for shape operations)
+pyclipper==1.4.0
+
+# Geometric operations for box/region calculations
+Shapely==2.1.2
+
+# ONNX runtime for OCR model execution
+onnxruntime==1.29.0
+
+# Protocol buffers for model serialization
+protobuf==7.36.1
+
+# ============================================================================
+# PYTORCH (CUDA SUPPORT)
+# ============================================================================
+# 
+# GPU acceleration via CUDA 12.8
+# Falls back to CPU inference if CUDA unavailable
+#
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.9.1+cu128
+torchvision==0.24.1+cu128
+
+# ============================================================================
+# HARDCODED CONFIGURATIONS (CRITICAL FOR MODEL OPERATION)
+# ============================================================================
+#
+# YOLO CLASS DEFINITIONS (5 Classes):
+# -----------------------------------------------
+# CLASS ID 0: NUMBER_PLATE          - Vehicle number plate
+# CLASS ID 1: RIDER                 - Person on motorcycle
+# CLASS ID 2: WITH_HELMET           - Rider wearing helmet
+# CLASS ID 3: WITHOUT_HELMET        - Rider without helmet (VIOLATION)
+# CLASS ID 4: MOTORCYCLE            - Two-wheeler vehicle
+#
+# See: data.yaml for class names mapping
+#
+# DETECTION CONFIDENCE THRESHOLDS (app.py):
+# -----------------------------------------------
+# RIDER_CONFIDENCE = 0.40            - Min confidence to detect rider
+# HELMET_CONFIDENCE = 0.25           - Min confidence for helmet detection
+# INFERENCE_SIZE = 1280              - YOLO model inference resolution
+#
+# HEAD CROP CONFIGURATION (auto_label_v4.py):
+# -----------------------------------------------
+# HEAD_TOP = 0.00                    - Head crop starts at top of rider
+# HEAD_BOTTOM = 0.32                 - Head region is 32% of rider height
+# HEAD_LEFT = 0.10                   - 10% left padding from rider width
+# HEAD_RIGHT = 0.90                  - 90% right boundary of rider width
+# HEAD_PADDING_X = 0.20              - 20% extra horizontal padding
+# HEAD_PADDING_Y = 0.20              - 20% extra vertical padding
+#
+# HEAD CROP DETECTION CONFIDENCE (auto_label_v4.py):
+# -----------------------------------------------
+# FULL_CONF = 0.25                   - Full image detection confidence
+# HEAD_CONF = 0.15                   - Head crop model confidence
+# HELMET_CONF = 0.35                 - Strong helmet evidence threshold
+# NO_HELMET_CONF = 0.25              - Strong no-helmet evidence threshold
+# MIN_HEAD_WIDTH = 18                - Minimum head crop width (pixels)
+# MIN_HEAD_HEIGHT = 18               - Minimum head crop height (pixels)
+#
+# RIDER FILTERING (auto_label_v4.py):
+# -----------------------------------------------
+# MIN_RIDER_WIDTH = 20               - Minimum rider box width to process
+# MIN_RIDER_HEIGHT = 50              - Minimum rider box height to process
+#
+# FLASK SERVER CONFIGURATION (app.py):
+# -----------------------------------------------
+# MAX_CONTENT_LENGTH = 200MB         - Max upload file size
+# IMAGE_EXTENSIONS = {.jpg, .jpeg, .png, .bmp, .webp}
+# VIDEO_EXTENSIONS = {.mp4, .avi, .mov, .mkv, .webm}
+#
+# DEVICE SELECTION LOGIC (app.py):
+# -----------------------------------------------
+# device = 0 if torch.cuda.is_available() else "cpu"
+# - Automatically uses CUDA GPU (device 0) if available
+# - Falls back to CPU if CUDA not detected
+# - GPU model: NVIDIA CUDA 12.8 compatible
+#
+# MODEL INFERENCE ASSOCIATIONS (app.py):
+# -----------------------------------------------
+# 1. Associate helmet with rider (within 30% head region)
+# 2. Associate rider with motorcycle (proximity + overlap scoring)
+# 3. Associate motorcycle with number plate (proximity + overlap scoring)
+# 4. Read OCR from number plate at confidence threshold >= 0.10
+#
+# ============================================================================
+# INSTALLATION & USAGE
+# ============================================================================
+#
+# Setup:
+#   python -m venv .venv
+#   .\.venv\Scripts\Activate.ps1  (Windows)
+#   source .venv/bin/activate      (Linux/Mac)
+#   pip install -r requirements.txt
+#
+# Run:
+#   python app.py
+#   Visit: http://127.0.0.1:5000
+#
+# ============================================================================
+# MODEL FILES REQUIRED
+# ============================================================================
+#
+# Place trained model at: models/helmet_v4_final_best.pt
+# - YOLO trained checkpoint
+# - Detects all 5 classes (NUMBER_PLATE, RIDER, WITH_HELMET, WITHOUT_HELMET, MOTORCYCLE)
+# - Supports image and video inference
+#
+# ============================================================================

@@ -40,22 +40,22 @@ export const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/75  transition-opacity"
         onClick={onClose}
       />
 
       {/* Modal Dialog */}
       <div className="flex min-h-full items-center justify-center p-4 text-center">
         <div
-          className={`w-full ${maxWidthClasses} transform overflow-hidden rounded-lg bg-aghat-navy-light border border-slate-700 p-6 text-left align-middle shadow-2xl transition-all`}
+          className={`w-full ${maxWidthClasses} transform overflow-hidden rounded-lg bg-white border border-slate-300 p-6 text-left align-middle shadow-2xl transition-all`}
           onClick={(e) => e.stopPropagation()}
         >
           {title && (
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
-              <h3 className="text-base font-semibold text-white tracking-wide uppercase">{title}</h3>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-4">
+              <h3 className="text-base font-semibold text-slate-900 tracking-wide uppercase">{title}</h3>
               <button
                 type="button"
-                className="text-slate-400 hover:text-slate-200 transition-colors p-1"
+                className="text-slate-600 hover:text-slate-800 transition-colors p-1"
                 onClick={onClose}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -65,9 +65,9 @@ export const Modal: React.FC<ModalProps> = ({
             </div>
           )}
 
-          <div className="text-sm text-slate-300">{children}</div>
+          <div className="text-sm text-slate-700">{children}</div>
 
-          {footer && <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-800 pt-4">{footer}</div>}
+          {footer && <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-200 pt-4">{footer}</div>}
         </div>
       </div>
     </div>

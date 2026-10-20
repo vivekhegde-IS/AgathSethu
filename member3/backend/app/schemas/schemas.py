@@ -2,6 +2,7 @@
 AGHAT SETHU — Pydantic Schemas for Request/Response Validation
 """
 
+import re
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -60,6 +61,34 @@ class AuthorityRegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Self-service profile edit (name, email, mobile)."""
+    full_name: str
+    email: EmailStr
+    phone: Optional[str] = None
+
+    @field_validator("full_name")
+    @classmethod
+    def name_valid(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not 2 <= len(v) <= 100:
+            raise ValueError("Full name must be 2-100 characters")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z .'-]*", v):
+            raise ValueError("Full name may contain only letters, spaces and . ' -")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def phone_valid(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not v.strip():
+            return None
+        digits = re.sub(r"[\s-]", "", v.strip())
+        match = re.fullmatch(r"(?:\+91|91|0)?([6-9]\d{9})", digits)
+        if not match:
+            raise ValueError("Enter a valid 10-digit Indian mobile number")
+        return f"+91{match.group(1)}"
 
 
 class TokenResponse(BaseModel):

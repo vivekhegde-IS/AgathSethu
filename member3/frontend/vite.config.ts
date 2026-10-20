@@ -5,6 +5,10 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Shown as "Last updated" in the public footer: the date this build was made.
+  define: {
+    __APP_LAST_UPDATED__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -25,10 +29,10 @@ export default defineConfig({
     port: 5173,
     open: true,
     watch: {
-      // Exclude the AgathSethu git repo subfolder and large media files
-      // from Vite's file watcher to prevent EBUSY errors on MP4 files
+      // Exclude large media files from Vite's file watcher to prevent EBUSY
+      // errors on MP4 files. (A '**/AgathSethu/**' entry used to be here; the
+      // project itself lives under AgathSethu/, so it hid every source change.)
       ignored: [
-        '**/AgathSethu/**',
         '**/*.mp4',
         '**/*.mkv',
         '**/node_modules/**',

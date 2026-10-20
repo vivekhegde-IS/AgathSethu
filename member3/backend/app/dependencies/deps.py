@@ -64,6 +64,16 @@ def require_authority(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def require_citizen(current_user: User = Depends(get_current_user)) -> User:
+    """Citizen portal endpoints: citizens only (authorities use their own portal)."""
+    if current_user.role != "citizen":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Citizen access required",
+        )
+    return current_user
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require the current user to be admin."""
     if current_user.role != "admin":
@@ -72,3 +82,18 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
             detail="Admin access required",
         )
     return current_user
+
+
+def authority_from_token(db: Session, token: str | None) -> User | None:
+    """WebSocket auth (browsers cannot set headers there): the same JWT, passed
+    as a query parameter. Returns the active authority/admin user, else None."""
+    if not token:
+        return None
+    try:
+        user_id = decode_access_token(token).get("sub")
+    except JWTError:
+        return None
+    user = UserService.get_by_id(db, user_id) if user_id else None
+    if user is None or user.status != "active" or user.role not in ("authority", "admin"):
+        return None
+    return user

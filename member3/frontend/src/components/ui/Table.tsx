@@ -22,15 +22,15 @@ export function Table<T>({
   data,
   keyExtractor,
   onRowClick,
-  emptyMessage = 'No telemetry records found',
+  emptyMessage = 'No records found',
   isLoading = false,
   className = '',
 }: TableProps<T>) {
   return (
-    <div className={`overflow-x-auto rounded-lg border border-slate-800/80 bg-aghat-navy-light/60 ${className}`}>
+    <div className={`overflow-x-auto rounded-lg border border-slate-200 bg-white ${className}`}>
       <table className="w-full text-left border-collapse">
         <thead>
-          <tr className="border-b border-slate-800 bg-[#121820]/90 text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-400">
+          <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700">
             {columns.map((col, idx) => (
               <th key={idx} className={`py-3 px-4 ${col.className || ''}`}>
                 {col.header}
@@ -38,19 +38,19 @@ export function Table<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-800/60 text-xs">
+        <tbody className="divide-y divide-slate-200 text-sm text-slate-800">
           {isLoading ? (
             <tr>
-              <td colSpan={columns.length} className="py-8 text-center text-slate-400">
+              <td colSpan={columns.length} className="py-8 text-center text-slate-600">
                 <div className="inline-flex items-center gap-2 font-mono">
                   <span className="w-2 h-2 rounded-full bg-aghat-blue animate-ping" />
-                  Streaming data...
+                  Loading…
                 </div>
               </td>
             </tr>
           ) : data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="py-8 text-center text-slate-500 font-mono">
+              <td colSpan={columns.length} className="py-8 text-center text-slate-500">
                 {emptyMessage}
               </td>
             </tr>
@@ -60,7 +60,7 @@ export function Table<T>({
                 key={keyExtractor(row, index)}
                 onClick={() => onRowClick && onRowClick(row)}
                 className={`transition-colors ${
-                  onRowClick ? 'cursor-pointer hover:bg-slate-800/60' : 'hover:bg-slate-800/30'
+                  onRowClick ? 'cursor-pointer hover:bg-blue-50' : 'hover:bg-slate-50'
                 }`}
               >
                 {columns.map((col, colIdx) => (

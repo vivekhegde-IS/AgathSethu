@@ -32,10 +32,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // while the token is being validated against the backend.
   if (isInitializing) {
     return (
-      <div className="min-h-screen bg-[#0a0e14] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm font-mono tracking-wider">
+          <p className="text-slate-600 text-sm font-mono tracking-wider">
             AUTHENTICATING…
           </p>
         </div>

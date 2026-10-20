@@ -20,7 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const baseClasses =
-    'inline-flex items-center justify-center font-medium rounded-md transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-aghat-navy disabled:opacity-50 disabled:cursor-not-allowed select-none'
+    'inline-flex items-center justify-center font-medium rounded-md transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed select-none'
 
   const sizeClasses = {
     sm: 'px-2.5 py-1 text-xs gap-1.5',
@@ -29,12 +29,12 @@ export const Button: React.FC<ButtonProps> = ({
   }[size]
 
   const variantClasses = {
-    primary: 'bg-aghat-blue hover:bg-aghat-blue-dark text-white shadow-md hover:shadow-glow focus:ring-aghat-blue',
-    secondary: 'bg-aghat-navy-lighter hover:bg-slate-700 text-slate-200 border border-slate-700 focus:ring-slate-500',
-    danger: 'bg-red-600 hover:bg-red-700 text-white shadow-md focus:ring-red-500',
-    success: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md focus:ring-emerald-500',
-    outline: 'bg-transparent border border-aghat-blue/60 text-blue-400 hover:bg-blue-950/40 focus:ring-aghat-blue',
-    ghost: 'bg-transparent text-slate-300 hover:bg-slate-800/60 hover:text-white focus:ring-slate-600',
+    primary: 'bg-blue-900 hover:bg-blue-800 text-white shadow-sm focus:ring-blue-800',
+    secondary: 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 focus:ring-blue-800',
+    danger: 'bg-red-700 hover:bg-red-800 text-white shadow-sm focus:ring-red-700',
+    success: 'bg-green-700 hover:bg-green-800 text-white shadow-sm focus:ring-green-700',
+    outline: 'bg-white border border-blue-900 text-blue-900 hover:bg-blue-50 focus:ring-blue-800',
+    ghost: 'bg-transparent text-blue-900 hover:bg-blue-50 focus:ring-blue-800',
   }[variant]
 
   return (

@@ -1,22 +1,13 @@
 /**
  * AGHAT SETHU — Authentication Store
  *
- * Central Zustand authentication state.
- *
- * Two modes controlled by VITE_ENABLE_REAL_AUTH:
- *
- *   VITE_ENABLE_REAL_AUTH=false (default)
- *   → Mock mode: pre-authenticated authority demo user. Existing behavior preserved.
- *
- *   VITE_ENABLE_REAL_AUTH=true
- *   → Real mode: all auth comes from FastAPI + PostgreSQL.
- *     - Starts unauthenticated.
- *     - On app startup, calls initializeAuth() to restore session from localStorage JWT.
- *     - loginWithCredentials() hits real API.
- *     - logout() clears localStorage token.
- *
- * NOTE: VITE_ENABLE_REAL_AUTH is intentionally SEPARATE from VITE_ENABLE_MOCK_DATA.
- * This allows: real auth + mock CARLA/ANPR/RFID sensor data simultaneously.
+ * Central Zustand authentication state. All auth comes from FastAPI + PostgreSQL:
+ *   - Starts unauthenticated.
+ *   - initializeAuth() restores a session from the stored JWT, validated by /auth/me.
+ *   - loginWithCredentials() hits the real login API.
+ *   - logout() clears the stored token.
+ * There is no mock / pre-authenticated mode: every protected page needs a real login,
+ * and the backend enforces the role on every protected endpoint.
  */
 
 import { create } from 'zustand'
@@ -59,36 +50,19 @@ interface AuthState {
   isInitializing: boolean  // app startup session restore in progress
   error: string | null
 
-  // Mock mode functions (preserved for VITE_ENABLE_REAL_AUTH=false)
-  login: (role: UserRole, email: string, name?: string) => void
-
-  // Real auth functions (used when VITE_ENABLE_REAL_AUTH=true)
-  loginWithCredentials: (email: string, password: string) => Promise<boolean>
+  /** Resolves to the logged-in user, or null on failure (error is set). */
+  loginWithCredentials: (email: string, password: string) => Promise<User | null>
   registerCitizen: (data: CitizenRegisterRequest) => Promise<{ success: boolean; message: string }>
   registerAuthority: (data: AuthorityRegisterRequest) => Promise<{ success: boolean; message: string }>
   initializeAuth: () => Promise<void>
 
-  // Universal
   logout: () => void
+  setUser: (user: User) => void
   clearError: () => void
 }
 
-// ── Feature flag ──────────────────────────────────────────────────────────────────
-const IS_REAL_AUTH = import.meta.env.VITE_ENABLE_REAL_AUTH === 'true'
-
-// ── Mock pre-authenticated authority user ─────────────────────────────────────────
-// Preserved for VITE_ENABLE_REAL_AUTH=false (existing demo behavior)
-const MOCK_AUTHORITY_USER: User = {
-  id: 'USR-AUTH-001',
-  name: 'Inspector Vikram Sen',
-  email: 'v.sen@trafficops.blr.gov.in',
-  role: 'authority',
-  badgeNumber: 'KA-TP-8841',
-  phone: '+91 98450 12345',
-}
-
 // ── Helper: map API UserResponse → authStore User ─────────────────────────────────
-function mapApiUser(apiUser: UserResponse): User {
+export function mapApiUser(apiUser: UserResponse): User {
   return {
     id: apiUser.id,
     name: apiUser.full_name,
@@ -103,54 +77,32 @@ function mapApiUser(apiUser: UserResponse): User {
 
 // ── Store ─────────────────────────────────────────────────────────────────────────
 export const useAuthStore = create<AuthState>((set) => ({
-  // ── Initial State ──────────────────────────────────────────────────────────────
-  // In mock mode: pre-authenticated authority demo user (existing behavior)
-  // In real mode: unauthenticated until initializeAuth() completes
-  user: IS_REAL_AUTH ? null : MOCK_AUTHORITY_USER,
-  token: IS_REAL_AUTH ? null : 'mock-jwt-token-aghat-sethu',
-  isAuthenticated: !IS_REAL_AUTH,
+  user: null,
+  token: null,
+  isAuthenticated: false,
   isLoading: false,
-  isInitializing: IS_REAL_AUTH, // real mode: true until initializeAuth() finishes
+  isInitializing: true, // true until initializeAuth() finishes
   error: null,
 
-  // ── Mock login (preserved for demo mode) ──────────────────────────────────────
-  login: (role: UserRole, email: string, name?: string) => {
-    if (IS_REAL_AUTH) {
-      console.warn('[authStore] login() called in real-auth mode — use loginWithCredentials() instead')
-      return
-    }
-    set({
-      user: {
-        id: `USR-${Date.now()}`,
-        name: name || (role === 'citizen' ? 'Aarav Sharma' : 'Officer Vikram Sen'),
-        email,
-        role,
-        badgeNumber: role !== 'citizen' ? 'KA-TP-9901' : undefined,
-      },
-      token: `jwt-session-${Date.now()}`,
-      isAuthenticated: true,
-      error: null,
-    })
-  },
-
   // ── Real login ─────────────────────────────────────────────────────────────────
-  loginWithCredentials: async (email: string, password: string): Promise<boolean> => {
+  loginWithCredentials: async (email: string, password: string): Promise<User | null> => {
     set({ isLoading: true, error: null })
     try {
       const response = await loginApi({ email, password })
       saveToken(response.access_token)
+      const user = mapApiUser(response.user)
       set({
-        user: mapApiUser(response.user),
+        user,
         token: response.access_token,
         isAuthenticated: true,
         isLoading: false,
         error: null,
       })
-      return true
+      return user
     } catch (err) {
       const message = extractAuthError(err)
       set({ isLoading: false, isAuthenticated: false, error: message })
-      return false
+      return null
     }
   },
 
@@ -184,12 +136,6 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   // ── Auth initialization (called once on app startup in real-auth mode) ─────────
   initializeAuth: async () => {
-    if (!IS_REAL_AUTH) {
-      // Mock mode — no initialization needed
-      set({ isInitializing: false })
-      return
-    }
-
     const { getToken } = await import('@api/apiClient')
     const token = getToken()
 
@@ -222,11 +168,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   // ── Logout ─────────────────────────────────────────────────────────────────────
   logout: () => {
-    if (IS_REAL_AUTH) {
-      // Fire-and-forget backend logout (stateless JWT — best effort)
-      logoutApi().catch(() => {})
-      clearToken()
-    }
+    // Fire-and-forget backend logout (stateless JWT — best effort)
+    logoutApi().catch(() => {})
+    clearToken()
     set({
       user: null,
       token: null,
@@ -235,15 +179,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     })
   },
 
+  // ── Replace the user after a profile save (value comes from the API) ──────────
+  setUser: (user: User) => set({ user }),
+
   // ── Clear error ────────────────────────────────────────────────────────────────
   clearError: () => set({ error: null }),
 }))
 
 // ── 401 listener — triggers logout when API returns unauthorized ──────────────────
 // Avoids circular import: apiClient → authStore → apiClient
-if (IS_REAL_AUTH) {
-  window.addEventListener('aghat:unauthorized', () => {
-    const { logout } = useAuthStore.getState()
-    logout()
-  })
-}
+window.addEventListener('aghat:unauthorized', () => {
+  const { isAuthenticated, logout } = useAuthStore.getState()
+  if (isAuthenticated) logout()
+})

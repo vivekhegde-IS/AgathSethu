@@ -15,7 +15,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full space-y-1.5">
         {label && (
-          <label htmlFor={inputId} className="block text-xs font-medium text-slate-300 tracking-wide uppercase">
+          <label htmlFor={inputId} className="block text-sm font-medium text-slate-800">
             {label}
           </label>
         )}
@@ -24,17 +24,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             id={inputId}
-            className={`w-full bg-[#121820] border ${
-              error ? 'border-red-500 focus:border-red-400 focus:ring-red-400/20' : 'border-slate-700 focus:border-aghat-blue focus:ring-aghat-blue/20'
-            } rounded-md text-sm text-slate-100 placeholder-slate-500 py-2 ${
+            className={`w-full bg-white border ${
+              error ? 'border-red-500 focus:border-red-400 focus:ring-red-400/20' : 'border-slate-300 focus:border-blue-800 focus:ring-blue-800/20'
+            } rounded-md text-sm text-slate-900 placeholder-slate-400 py-2 ${
               leftIcon ? 'pl-9' : 'pl-3.5'
-            } ${rightIcon ? 'pr-9' : 'pr-3.5'} transition-all focus:outline-none focus:ring-2 disabled:opacity-50 disabled:bg-slate-900 ${className}`}
+            } ${rightIcon ? 'pr-9' : 'pr-3.5'} transition-all focus:outline-none focus:ring-2 disabled:opacity-50 disabled:bg-slate-100 ${className}`}
             {...props}
           />
           {rightIcon && <div className="absolute right-3 text-slate-400 pointer-events-none">{rightIcon}</div>}
         </div>
-        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-        {helperText && !error && <p className="text-xs text-slate-400 mt-1">{helperText}</p>}
+        {error && <p className="text-xs text-red-700 mt-1">{error}</p>}
+        {helperText && !error && <p className="text-xs text-slate-500 mt-1">{helperText}</p>}
       </div>
     )
   }

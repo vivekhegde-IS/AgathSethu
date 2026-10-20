@@ -1,0 +1,90 @@
+###############################################################################
+# AGHAT SETHU - MediaMTX (v1.21.x) for the three CARLA junction cameras
+#
+#   CARLA machine (member1/streaming)          this machine (website host)
+#   FFmpeg H.264 --RTSP/TCP :8554--> MediaMTX --WebRTC (UDP :8189)--> browsers
+#                                       ^
+#                                       | WHEP signalling on 127.0.0.1:8889,
+#                                       | reached only through the FastAPI
+#                                       | backend (/api/streams/{cam}/whep),
+#                                       | which checks the website JWT.
+#
+# Passwords are NOT stored here. Set them in the environment that starts
+# MediaMTX (run_mediamtx.ps1 / docker-compose read member3/media-server/.env):
+#   MTX_AUTHINTERNALUSERS_0_PASS  publisher password (CARLA, STREAM_PUBLISH_PASS)
+#   MTX_AUTHINTERNALUSERS_1_PASS  reader password    (backend, MEDIAMTX_READ_PASS)
+# Optional: MTX_WEBRTCADDITIONALHOSTS=100.118.103.8,192.168.1.20
+###############################################################################
+
+logLevel: info
+logDestinations: [stdout]
+
+# --- authentication ------------------------------------------------------------
+authMethod: internal
+authInternalUsers:
+  # 0: the CARLA simulation publishes cam1..cam3 (RTSP push)
+  - user: carla
+    pass: set-MTX_AUTHINTERNALUSERS_0_PASS
+    ips: []
+    permissions:
+      - action: publish
+        path: ~^cam[1-3]$
+  # 1: the website backend reads cam1..cam3 (WHEP), from this machine only
+  - user: website
+    pass: set-MTX_AUTHINTERNALUSERS_1_PASS
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: read
+        path: ~^cam[1-3]$
+
+# --- unused servers off ----------------------------------------------------------
+api: false
+metrics: false
+pprof: false
+playback: false
+rtmp: false
+hls: false
+srt: false
+moq: false
+
+# --- RTSP: ingest from the simulation -------------------------------------------
+rtsp: true
+rtspTransports: [tcp]          # one TCP connection per camera; survives Tailscale/NAT
+rtspAddress: :8554
+rtspAuthMethods: [basic]
+
+# --- WebRTC: delivery to browsers ------------------------------------------------
+webrtc: true
+# WHEP/HTTP only on loopback: browsers reach it through the backend proxy.
+webrtcAddress: 127.0.0.1:8889
+webrtcEncryption: false
+webrtcAllowOrigins: ["*"]
+# Media (SRTP over UDP) - must be reachable from viewers.
+webrtcLocalUDPAddress: :8189
+# Optional ICE-TCP fallback for networks that block UDP (open TCP 8189 too).
+webrtcLocalTCPAddress: ""
+# Host candidates: every local interface (LAN, Tailscale) ...
+webrtcIPsFromInterfaces: true
+webrtcIPsFromInterfacesList: []
+webrtcIPsFromInterfacesExcludeList: []
+# ... plus explicit addresses (needed in Docker, where interfaces are virtual).
+webrtcAdditionalHosts: ["100.118.103.8"]
+# STUN adds the public (server-reflexive) address for viewers behind NAT.
+# On LAN / Tailscale only, host candidates are enough. For viewers on the
+# public internet add TURN (see turnserver.conf and README-STREAMING.md).
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+webrtcSTUNGatherTimeout: 2s
+webrtcHandshakeTimeout: 10s
+webrtcTrackGatherTimeout: 2s
+
+# --- streams ----------------------------------------------------------------------
+pathDefaults:
+  source: publisher
+  overridePublisher: true      # a restarted CARLA encoder replaces the stale one
+  record: false
+
+paths:
+  cam1:
+  cam2:
+  cam3:

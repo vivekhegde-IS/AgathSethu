@@ -1,170 +1,89 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '@stores/authStore'
-import { useVehicleStore } from '@stores/vehicleStore'
-import { useViolationStore } from '@stores/violationStore'
-import { Card, MetricCard, Badge, Button } from '@components/ui'
+import { Card, MetricCard, Badge, Button, Spinner } from '@components/ui'
+import { FinesTable, rupees, useMyFines } from '@components/citizen/FinesTable'
 
 export const CitizenDashboard: React.FC = () => {
   const { user } = useAuthStore()
-  const { citizenVehicles } = useVehicleStore()
-  const { violations } = useViolationStore()
+  // Real data only: vehicles and fines of the logged-in citizen from the backend.
+  const { data, error, reload } = useMyFines()
 
-  const pendingViolations = violations.filter((v) => v.status !== 'PAID')
-  const totalDue = pendingViolations.reduce((acc, curr) => acc + curr.fineAmount, 0)
+  const vehicles = data?.vehicles ?? []
+  const fines = data?.fines ?? []
 
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
-      <div className="p-6 rounded-lg bg-gradient-to-r from-aghat-navy-light to-blue-950/40 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="p-6 rounded-lg bg-gradient-to-r from-white to-blue-50 border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-cyan-400 uppercase tracking-widest">CITIZEN PORTAL</span>
-            <Badge variant="success" size="sm">
-              FASTAG ACTIVE
-            </Badge>
-          </div>
-          <h2 className="text-2xl font-bold font-mono text-white mt-1">Welcome back, {user?.name}</h2>
-          <p className="text-xs text-slate-400 font-mono mt-1">
-            Registered Vehicles: {citizenVehicles.length} · Live Enforcement Sync Active
+          <span className="text-xs font-mono text-blue-800 uppercase tracking-widest">CITIZEN PORTAL</span>
+          <h2 className="text-2xl font-bold font-mono text-slate-900 mt-1">Welcome back, {user?.name}</h2>
+          <p className="text-sm text-slate-600 mt-1">
+            Registered Vehicles: {vehicles.map((v) => v.plate_number).join(', ') || '—'}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link to="/citizen/violations">
-            <Button variant="danger" size="sm">
-              Pay Pending Fines (₹{totalDue})
-            </Button>
-          </Link>
-          <Link to="/citizen/vehicles">
-            <Button variant="secondary" size="sm">
-              Manage Vehicles
-            </Button>
-          </Link>
+          <Button variant="secondary" size="sm" onClick={reload}>
+            Refresh
+          </Button>
+          {data && data.unpaid_count > 0 && (
+            <Link to="/citizen/payments">
+              <Button variant="danger" size="sm">
+                Pay unpaid fines ({rupees(data.total_unpaid)})
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{error}</div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard label="Registered Vehicles" value={data ? vehicles.length : '…'} status="normal" />
         <MetricCard
-          label="Registered Vehicles"
-          value={citizenVehicles.length}
-          subValue="All FASTag Linked"
-          status="normal"
+          label="Unpaid Fines"
+          value={data ? data.unpaid_count : '…'}
+          status={data && data.unpaid_count > 0 ? 'warning' : 'success'}
         />
         <MetricCard
-          label="Pending Challans"
-          value={pendingViolations.length}
-          subValue={`Total ₹${totalDue} Due`}
-          status={pendingViolations.length > 0 ? 'warning' : 'success'}
+          label="Total Unpaid"
+          value={data ? rupees(data.total_unpaid) : '…'}
+          status={data && data.total_unpaid > 0 ? 'critical' : 'success'}
         />
-        <MetricCard
-          label="Compliance Score"
-          value="92 / 100"
-          subValue="Tier 1 Safe Driver"
-          status="success"
-          trend={{ direction: 'up', value: '+4 pts', positive: true }}
-        />
-        <MetricCard
-          label="Recent Detections"
-          value="4 Junctions"
-          subValue="Cross-junction pass logged"
-          status="normal"
-        />
+        <MetricCard label="Fines Issued" value={data ? fines.length : '…'} status="normal" />
       </div>
 
-      {/* Two Column Layout: Vehicles & Pending Challans */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Vehicles Section */}
-        <Card
-          title="My Registered Vehicles"
-          actions={
-            <Link to="/citizen/vehicles">
-              <Button variant="ghost" size="sm">
-                View All →
-              </Button>
-            </Link>
-          }
-        >
-          <div className="space-y-3">
-            {citizenVehicles.map((veh) => (
-              <div
-                key={veh.vehicleId}
-                className="p-3 bg-[#121820] rounded border border-slate-800 flex items-center justify-between"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-white text-sm">{veh.registrationNumber}</span>
-                    <Badge variant="info" size="sm">
-                      {veh.vehicleType}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">{veh.model}</p>
-                  <p className="text-[10px] font-mono text-cyan-400 mt-1">FASTag ID: {veh.rfidTag}</p>
-                </div>
-                <div className="text-right">
-                  <span
-                    className={`text-xs font-mono font-semibold ${
-                      veh.activeViolationsCount > 0 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}
-                  >
-                    {veh.activeViolationsCount > 0
-                      ? `${veh.activeViolationsCount} Pending Challan`
-                      : 'Clean Record'}
-                  </span>
-                </div>
+      {/* Registered vehicles (from the vehicles table) */}
+      <Card title="My Registered Vehicles">
+        {!data ? (
+          <Spinner />
+        ) : vehicles.length === 0 ? (
+          <p className="text-sm text-slate-600">No vehicles are registered to your account.</p>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {vehicles.map((veh) => (
+              <div key={veh.id} className="p-3 bg-slate-50 rounded border border-slate-200 flex items-center gap-3">
+                <span className="font-mono font-bold text-slate-900 text-sm">{veh.plate_number}</span>
+                {veh.vehicle_type && <Badge variant="info" size="sm">{veh.vehicle_type}</Badge>}
+                <span
+                  className={`text-xs font-mono font-semibold ${
+                    veh.unpaid_count > 0 ? 'text-amber-700' : 'text-emerald-700'
+                  }`}
+                >
+                  {veh.unpaid_count > 0 ? `${veh.unpaid_count} Unpaid` : 'No unpaid fines'}
+                </span>
               </div>
             ))}
           </div>
-        </Card>
+        )}
+      </Card>
 
-        {/* Violations Section */}
-        <Card
-          title="Active e-Challans & Violations"
-          actions={
-            <Link to="/citizen/violations">
-              <Button variant="ghost" size="sm">
-                Full Records →
-              </Button>
-            </Link>
-          }
-        >
-          {pendingViolations.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 font-mono text-xs">
-              ✓ No pending violations on your registered vehicles.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingViolations.map((v) => (
-                <div
-                  key={v.violation_id}
-                  className="p-3 bg-[#161214] rounded border border-red-900/60 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="danger" size="sm">
-                        {v.violation_type}
-                      </Badge>
-                      <span className="font-mono text-xs font-semibold text-white">{v.license_plate}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-1">{v.location}</p>
-                    <p className="text-[10px] font-mono text-slate-500">
-                      {new Date(v.timestamp).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <p className="font-mono font-bold text-sm text-red-400">₹{v.fineAmount}</p>
-                    <Link to={`/citizen/payments/${v.violation_id}`}>
-                      <Button variant="danger" size="sm">
-                        Pay Fine
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+      {/* Fines (newest first) with the frames captured from the uploaded video */}
+      <Card title="My Violations / Fines">{!data && !error ? <Spinner /> : <FinesTable fines={fines} />}</Card>
     </div>
   )
 }

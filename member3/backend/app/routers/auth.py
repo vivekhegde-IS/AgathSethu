@@ -18,6 +18,7 @@ from app.schemas.schemas import (
     CitizenRegisterRequest,
     LoginRequest,
     MessageResponse,
+    ProfileUpdateRequest,
     RegisterResponse,
     TokenResponse,
     UserResponse,
@@ -159,6 +160,28 @@ def get_me(current_user: User = Depends(get_current_user)):
     Requires a valid Bearer JWT in the Authorization header.
     This endpoint validates that the token is still valid and the account is active.
     """
+    return UserResponse.model_validate(current_user)
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update the current user's name, email and mobile number",
+)
+def update_me(data: ProfileUpdateRequest, current_user: User = Depends(get_current_user),
+              db: Session = Depends(get_db)):
+    """Saves the profile to the users table; the response is the stored row."""
+    email = data.email.lower()
+    if email != current_user.email.lower():
+        other = UserService.get_by_email(db, email)
+        if other is not None and other.id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="This email is already used by another account")
+    current_user.full_name = data.full_name
+    current_user.email = email
+    current_user.phone = data.phone
+    db.commit()
+    db.refresh(current_user)
     return UserResponse.model_validate(current_user)
 
 

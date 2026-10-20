@@ -1,187 +1,171 @@
-import React, { useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useViolationStore } from '@stores/violationStore'
-import { useIncidentStore } from '@stores/incidentStore'
-import { useCameraStore } from '@stores/cameraStore'
-import { useSystemStore } from '@stores/systemStore'
-import { Card, MetricCard, Badge, StatusIndicator, Button, Table, Column } from '@components/ui'
+import { AuthImage, Badge, Button, Card, MetricCard, Spinner } from '@components/ui'
+import { AuthoritySummary, errorMessage, fetchSummary, formatIst, rupees } from '@api/portal'
 
+const REFRESH_MS = 30000
+
+/** Home after login: overall crashes, violations and fines, all from the backend. */
 export const AuthorityDashboard: React.FC = () => {
-  const { violations } = useViolationStore()
-  const { incidents } = useIncidentStore()
-  const { junctions, fetchCameras } = useCameraStore()
-  const { member1, checkHealth } = useSystemStore()
+  const [data, setData] = useState<AuthoritySummary | null>(null)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    try {
+      setData(await fetchSummary())
+      setError('')
+    } catch (err) {
+      setError(errorMessage(err, 'Could not load the dashboard.'))
+    }
+  }, [])
 
   useEffect(() => {
-    fetchCameras()
-    checkHealth()
-  }, [fetchCameras, checkHealth])
+    load()
+    const timer = window.setInterval(load, REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [load])
 
-  const pendingViolations = violations.filter((v) => v.status !== 'PAID')
-  const criticalIncident = incidents.find((i) => i.severity === 'CRITICAL')
+  if (!data) {
+    return error ? (
+      <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{error}</div>
+    ) : (
+      <Spinner />
+    )
+  }
 
-  const violationColumns: Column<(typeof violations)[0]>[] = [
-    {
-      header: 'CHALLAN #',
-      cell: (row) => <span className="font-mono font-semibold text-cyan-400">{row.violation_id}</span>,
-    },
-    {
-      header: 'PLATE',
-      cell: (row) => <span className="font-mono font-bold text-white">{row.license_plate}</span>,
-    },
-    {
-      header: 'TYPE',
-      cell: (row) => (
-        <Badge variant={row.severity === 'severe' ? 'danger' : 'warning'} size="sm">
-          {row.violation_type}
-        </Badge>
-      ),
-    },
-    {
-      header: 'LOCATION',
-      cell: (row) => <span className="text-slate-300 font-mono text-xs">{row.location}</span>,
-    },
-    {
-      header: 'FINE',
-      cell: (row) => <span className="font-mono text-white font-bold">₹{row.fineAmount}</span>,
-    },
-    {
-      header: 'ACTION',
-      className: 'text-right',
-      cell: (row) => (
-        <Link to={`/authority/violations/${row.violation_id}`}>
-          <Button variant="secondary" size="sm">
-            Review Evidence →
-          </Button>
-        </Link>
-      ),
-    },
-  ]
+  const { crashes, violations, fines, latest_crash_frame: frame } = data
 
   return (
     <div className="space-y-6">
-      {/* Top Banner Alert if Critical Crash Detected */}
-      {criticalIncident && (
-        <div className="p-4 rounded-lg bg-red-950/80 border-2 border-red-600 shadow-glowRed flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-pulse-slow">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🚨</span>
-            <div>
-              <div className="flex items-center gap-2">
-                <Badge variant="danger" size="md">
-                  LEVEL 2 CRITICAL COLLISION
-                </Badge>
-                <span className="text-xs font-mono text-red-300">INCIDENT ID: {criticalIncident.incidentId}</span>
-              </div>
-              <h3 className="text-sm font-bold font-mono text-white mt-0.5">
-                {criticalIncident.title} ({criticalIncident.location.junctionName})
-              </h3>
-              <p className="text-xs text-red-200 font-mono mt-0.5">
-                Impact Speed: {criticalIncident.impactSpeedKmh} km/h · Candidate Suspects: {criticalIncident.candidateVehicles.length} Flagged
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link to={`/authority/incidents/${criticalIncident.incidentId}`}>
-              <Button variant="danger" size="sm">
-                Open Investigation Radar →
-              </Button>
-            </Link>
-          </div>
-        </div>
-      )}
+      <div>
+        <h2 className="text-2xl font-semibold text-blue-950">Overview</h2>
+        <p className="text-sm text-slate-600">Crashes, traffic violations and fines recorded by the system.</p>
+      </div>
 
-      {/* Operational KPI Grid */}
+      {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{error}</div>}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          label="Active Junctions"
-          value={`${junctions.length} Online`}
-          subValue="100% Sensor Stream Health"
+          label="Crashes detected"
+          value={crashes.total}
+          subValue={`${crashes.today} today`}
+          status={crashes.unresolved > 0 ? 'critical' : 'normal'}
+        />
+        <MetricCard
+          label="Unresolved crashes"
+          value={crashes.unresolved}
+          subValue={`${crashes.resolved_today} resolved today`}
+          status={crashes.unresolved > 0 ? 'warning' : 'success'}
+        />
+        <MetricCard
+          label="Traffic violations detected"
+          value={violations.total}
+          subValue={`${violations.today} today`}
           status="normal"
         />
         <MetricCard
-          label="Routine Violations"
-          value={pendingViolations.length}
-          subValue="Level 1 Pending Review"
-          status={pendingViolations.length > 0 ? 'warning' : 'normal'}
-        />
-        <MetricCard
-          label="ANPR Stream Rate"
-          value="98.8% Fused"
-          subValue="Vision + FASTag RFID Match"
-          status="success"
-          trend={{ direction: 'up', value: '3,420 veh/hr', positive: true }}
-        />
-        <MetricCard
-          label="CARLA Sim Telemetry"
-          value={member1?.scenarios_active ? `${member1.scenarios_active} Active` : 'Online'}
-          subValue="48 Simulated Vehicles"
-          status="normal"
+          label="Fines pending"
+          value={rupees(fines.pending_amount)}
+          subValue={`${fines.pending_count} unpaid · ${rupees(fines.collected_amount)} collected`}
+          status={fines.pending_count > 0 ? 'warning' : 'normal'}
         />
       </div>
 
-      {/* Central Command Split View: Live Junction Telemetry + Routine Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Live Multi-Camera Preview */}
         <Card
-          title="Monitored Junction Grid"
-          actions={
-            <Link to="/authority/live">
-              <Button variant="ghost" size="sm">
-                Full Screen Grid →
-              </Button>
-            </Link>
-          }
+          title="Latest crash frame"
           className="lg:col-span-1"
+          actions={
+            frame && (
+              <Link to={`/authority/evidence/${frame.incident_id}`}>
+                <Button variant="ghost" size="sm">
+                  Open →
+                </Button>
+              </Link>
+            )
+          }
         >
-          <div className="space-y-3">
-            <div className="relative aspect-video rounded bg-black border border-slate-700 overflow-hidden flex items-center justify-center">
-              <img
-                src="https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80"
-                alt="Junction Cam Feed"
-                className="w-full h-full object-cover"
+          {frame ? (
+            <div className="space-y-2">
+              <AuthImage
+                src={frame.url}
+                alt={`Camera frame of crash ${frame.reference}`}
+                className="w-full aspect-video object-cover rounded border border-slate-300"
+                fallback={<p className="text-xs text-slate-600">The evidence image is not available.</p>}
               />
-              <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono text-cyan-400 border border-cyan-500/40">
-                CAM-J01-N · LIVE 30 FPS
-              </div>
-              <div className="absolute bottom-2 left-2">
-                <StatusIndicator status="active" label="CARLA STREAM" />
-              </div>
+              <p className="text-xs font-mono text-slate-700">
+                {frame.reference} · {frame.location}
+              </p>
+              <p className="text-[11px] font-mono text-slate-500">Captured {formatIst(frame.captured_at)}</p>
             </div>
-
-            <div className="p-3 bg-[#121820] rounded border border-slate-800 space-y-2 text-xs font-mono">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Junction:</span>
-                <span className="text-white font-semibold">Koramangala 80ft Signal</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Active Cameras:</span>
-                <span className="text-cyan-300">8 / 8 Streaming</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">RFID Gantries:</span>
-                <span className="text-emerald-400">4 / 4 Sync</span>
-              </div>
-            </div>
-          </div>
+          ) : (
+            <p className="text-sm text-slate-600 py-6 text-center">No crash evidence recorded yet.</p>
+          )}
         </Card>
 
-        {/* Level 1 Routine Violation Queue */}
         <Card
-          title="Level 1 Routine Enforcement Queue"
+          title="Recent crashes"
+          className="lg:col-span-1"
           actions={
-            <Link to="/authority/level1">
+            <Link to="/authority/incidents">
               <Button variant="ghost" size="sm">
-                Enforcement Desk →
+                Radar →
               </Button>
             </Link>
           }
-          className="lg:col-span-2"
         >
-          <Table
-            columns={violationColumns}
-            data={violations.slice(0, 4)}
-            keyExtractor={(row) => row.violation_id}
-          />
+          {data.recent_incidents.length === 0 ? (
+            <p className="text-sm text-slate-600 py-6 text-center">No crashes recorded.</p>
+          ) : (
+            <ul className="divide-y divide-slate-200">
+              {data.recent_incidents.map((incident) => (
+                <li key={incident.id} className="py-2 flex items-center justify-between gap-2">
+                  <Link to={`/authority/evidence/${incident.id}`} className="min-w-0">
+                    <p className="text-xs font-mono font-semibold text-blue-800 hover:underline">{incident.reference}</p>
+                    <p className="text-[11px] font-mono text-slate-600 truncate">
+                      {incident.location} · {formatIst(incident.created_at)}
+                    </p>
+                  </Link>
+                  <Badge variant={incident.resolved ? 'success' : 'danger'} size="sm">
+                    {incident.resolved ? 'Resolved' : 'Unresolved'}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="Violations by type"
+          className="lg:col-span-1"
+          actions={
+            <Link to="/authority/fines">
+              <Button variant="ghost" size="sm">
+                Fines →
+              </Button>
+            </Link>
+          }
+        >
+          {violations.by_type.length === 0 ? (
+            <p className="text-sm text-slate-600 py-6 text-center">No violations recorded.</p>
+          ) : (
+            <ul className="space-y-3">
+              {violations.by_type.map((row) => (
+                <li key={row.violation_type} className="text-xs font-mono">
+                  <div className="flex justify-between text-slate-700 pb-1">
+                    <span>{row.violation_type}</span>
+                    <span className="font-bold text-slate-900">{row.count}</span>
+                  </div>
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden" aria-hidden="true">
+                    <div
+                      className="bg-cyan-500 h-full"
+                      style={{ width: `${(row.count / Math.max(1, violations.total)) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
     </div>

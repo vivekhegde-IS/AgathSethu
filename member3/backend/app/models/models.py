@@ -203,6 +203,25 @@ class Incident(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
+    # --- RFID -> camera cross-verification (migration 002) ---
+    # run_id scopes everything: alert ids restart every CARLA run, so a run plus
+    # the involved plates plus the junction is what makes an incident idempotent.
+    run_id = Column(String(64), nullable=True, index=True)
+    crash_ts_sim = Column(Float, nullable=True)          # event (sim) time, never wall clock
+    crash_frame = Column(Integer, nullable=True)
+    crash_junction = Column(String(16), nullable=True)
+    world_x = Column(Float, nullable=True)
+    world_y = Column(Float, nullable=True)
+    world_z = Column(Float, nullable=True)
+    dedupe_key = Column(String(255), nullable=True, unique=True)
+    # RFID cross-verification (migration 004)
+    source = Column(String(16), nullable=True, index=True)       # live | replay | synthetic
+    archived = Column(Boolean, nullable=False, default=False, server_default="false")
+    run_started_at = Column(DateTime(timezone=True), nullable=True)
+    # Officer resolution (migration 007); resolved_at above is set with it
+    resolved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolution_note = Column(Text, nullable=True)
+
     # Relationships
     junction = relationship("Junction", back_populates="incidents")
     collision_event = relationship("CollisionEvent", back_populates="incident", uselist=False)
@@ -213,6 +232,7 @@ class Incident(Base):
     __table_args__ = (
         Index("ix_incidents_junction_id_created_at", "junction_id", "created_at"),
         Index("ix_incidents_status", "status"),
+        # run_id already carries index=True, which creates ix_incidents_run_id.
     )
 
 
@@ -353,4 +373,220 @@ class Evidence(Base):
     __table_args__ = (
         Index("ix_evidence_incident_id", "incident_id"),
         Index("ix_evidence_violation_id", "violation_id"),
+    )
+
+
+# =================================================================================
+# RFID -> CAMERA PLATE CROSS-VERIFICATION (migration 002)
+# =================================================================================
+
+
+# ── Vehicle Registry ──────────────────────────────────────────────────────────────
+class VehicleRegistry(Base):
+    """EPC -> plate. The ONLY way a tag becomes a plate.
+
+    An EPC that is not here resolves to a NULL plate and is reported as
+    UNREGISTERED_TAG; a plate is never invented for it.
+    """
+
+    __tablename__ = "vehicle_registry"
+
+    epc = Column(String(64), primary_key=True)
+    plate_norm = Column(String(20), nullable=True, index=True)
+    plate_display = Column(String(32), nullable=True)
+    state_code = Column(String(8), nullable=True)
+    sim_vehicle_id = Column(String(8), nullable=True)   # debug only, never matched on
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ── Incident Alerts ──────────────────────────────────────────────────────────────
+class IncidentAlert(Base):
+    """Every crash alert linked to its incident, for the full audit trail."""
+
+    __tablename__ = "incident_alerts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+                         nullable=False)
+    alert_id = Column(String(64), nullable=False)
+    run_id = Column(String(64), nullable=True)
+    source = Column(String(16), nullable=False)          # physics | imu_gps
+    status = Column(String(64), nullable=True)
+    timestamp_sim = Column(Float, nullable=True)          # event time
+    frame = Column(Integer, nullable=True)
+    raw = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Idempotency: a retried alert never links twice.
+        UniqueConstraint("incident_id", "alert_id", name="uq_incident_alerts_incident_alert"),
+        Index("ix_incident_alerts_alert_id", "alert_id"),
+    )
+
+
+# ── Incident Vehicles ────────────────────────────────────────────────────────────
+class IncidentVehicle(Base):
+    __tablename__ = "incident_vehicles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+                         nullable=False)
+    plate_norm = Column(String(20), nullable=False)
+    plate_display = Column(String(32), nullable=True)
+    epc = Column(String(64), nullable=True)
+    role = Column(String(16), nullable=False, default="involved")   # involved | nearby
+    sim_vehicle_id = Column(String(8), nullable=True)               # debug only
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("incident_id", "plate_norm", "role", name="uq_incident_vehicles_plate_role"),
+        Index("ix_incident_vehicles_epc", "epc"),
+    )
+
+
+# ── RFID Reports (raw archive) ───────────────────────────────────────────────────
+class RfidReport(Base):
+    """Optional raw archive of normalized reports; UNIQUE is the dedupe."""
+
+    __tablename__ = "rfid_reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_id = Column(String(64), nullable=True)
+    reader_id = Column(String(64), nullable=False)
+    seq = Column(Integer, nullable=False)
+    junction_id = Column(String(16), nullable=False)
+    epc = Column(String(64), nullable=False)
+    plate_norm = Column(String(20), nullable=True)          # from the registry; NULL if unknown
+    registry_status = Column(String(24), nullable=True)     # REGISTERED | UNREGISTERED_TAG
+    first_seen_ts = Column(Float, nullable=False)
+    last_seen_ts = Column(Float, nullable=False)
+    tag_seen_count = Column(Integer, nullable=True)
+    rssi_dbm = Column(Float, nullable=True)
+    schema = Column(String(32), nullable=True)
+    sim_vehicle_id = Column(String(8), nullable=True)      # debug only
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "reader_id", "seq", name="uq_rfid_reports_run_reader_seq"),
+        Index("ix_rfid_reports_epc_time", "epc", "last_seen_ts"),
+    )
+
+
+# ── Crash-zone RFID snapshot ─────────────────────────────────────────────────────
+class CrashZoneRfid(Base):
+    __tablename__ = "crash_zone_rfid"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+                         nullable=False)
+    junction_id = Column(String(16), nullable=False)
+    reader_id = Column(String(64), nullable=True)
+    epc = Column(String(64), nullable=False)
+    plate_norm = Column(String(20), nullable=True)
+    first_seen_ts = Column(Float, nullable=False)
+    last_seen_ts = Column(Float, nullable=False)
+    report_count = Column(Integer, nullable=False, default=0)
+    tag_seen_count = Column(Integer, nullable=False, default=0)
+    peak_rssi_dbm = Column(Float, nullable=True)
+    role = Column(String(16), nullable=False, default="involved")
+    zone = Column(String(16), nullable=False, default="crash", server_default="crash")  # crash | context
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("incident_id", "junction_id", "epc",
+                         name="uq_crash_zone_rfid_incident_junction_epc"),
+        Index("ix_crash_zone_rfid_incident", "incident_id"),
+    )
+
+
+# ── RFID Sightings ───────────────────────────────────────────────────────────────
+class RfidSighting(Base):
+    __tablename__ = "rfid_sightings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+                         nullable=False)
+    epc = Column(String(64), nullable=False)
+    plate_norm = Column(String(20), nullable=True)
+    junction_id = Column(String(16), nullable=False)
+    reader_id = Column(String(64), nullable=True)
+    first_seen_ts = Column(Float, nullable=False)
+    last_seen_ts = Column(Float, nullable=False)
+    report_count = Column(Integer, nullable=False, default=0)
+    tag_seen_count = Column(Integer, nullable=False, default=0)
+    peak_rssi_dbm = Column(Float, nullable=True)
+    closed = Column(Boolean, nullable=False, default=False)
+    finalized = Column(Boolean, nullable=False, default=False, server_default="false")
+    version = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_rfid_sightings_incident_epc", "incident_id", "epc"),
+    )
+
+
+# ── Vision Matches ───────────────────────────────────────────────────────────────
+class VisionMatch(Base):
+    __tablename__ = "vision_matches"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sighting_id = Column(UUID(as_uuid=True), ForeignKey("rfid_sightings.id", ondelete="CASCADE"),
+                         nullable=False)
+    status = Column(String(32), nullable=False)
+    rfid_plate = Column(String(20), nullable=True)
+    anpr_plate = Column(String(20), nullable=True)
+    anpr_confidence = Column(Float, nullable=True)
+    edit_distance = Column(Integer, nullable=True)
+    camera_id = Column(String(64), nullable=True)
+    best_frame_ts = Column(Float, nullable=True)         # event time
+    time_delta_s = Column(Float, nullable=True)
+    frames_used = Column(Integer, nullable=True)
+    all_plates_seen = Column(JSON, nullable=True)
+    anpr_model = Column(String(255), nullable=True)
+    # rule-based fusion (migration 004)
+    rule_assisted = Column(Boolean, nullable=False, default=False, server_default="false")
+    match_reason = Column(String(255), nullable=True)
+    diff = Column(JSON, nullable=True)               # [{position, anpr, rfid}]
+    other_vehicles = Column(JSON, nullable=True)     # valid plates of other vehicles in view
+    rejected_reads = Column(JSON, nullable=True)     # [{raw, reasons, frame_ts}]
+    per_frame = Column(JSON, nullable=True)          # per-frame raw/corrected/valid/reasons
+    max_plate_px = Column(Float, nullable=True)
+    cluster_frames = Column(Integer, nullable=True)
+    anpr_state_code = Column(String(4), nullable=True)
+    version = Column(Integer, nullable=False, default=0, server_default="0")
+    finalized = Column(Boolean, nullable=False, default=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("sighting_id", name="uq_vision_matches_sighting"),
+        Index("ix_vision_matches_status", "status"),
+    )
+
+
+# ── Evidence Files ───────────────────────────────────────────────────────────────
+class EvidenceFile(Base):
+    """Path + sha256 only: image bytes never go into Postgres."""
+
+    __tablename__ = "evidence_files"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+                         nullable=True)
+    vision_match_id = Column(UUID(as_uuid=True), ForeignKey("vision_matches.id", ondelete="CASCADE"),
+                             nullable=True)
+    owner = Column(String(32), nullable=False)           # incident | vision_match
+    kind = Column(String(32), nullable=False)            # annotated_frame | plate_crop | crash_frame
+    path = Column(String(512), nullable=False)
+    sha256 = Column(String(64), nullable=False)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    score = Column(Float, nullable=True)
+    frame_ts = Column(Float, nullable=True)          # sim time of the frame
+    junction_id = Column(String(16), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_evidence_files_incident", "incident_id"),
+        Index("ix_evidence_files_vision_match", "vision_match_id"),
     )

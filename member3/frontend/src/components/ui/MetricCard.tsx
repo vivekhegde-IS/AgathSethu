@@ -24,38 +24,38 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   className = '',
 }) => {
   const statusBorder = {
-    normal: 'border-slate-800/80 hover:border-slate-700',
-    warning: 'border-amber-700/50 hover:border-amber-600',
-    critical: 'border-red-700/60 hover:border-red-500 shadow-glowRed',
-    success: 'border-emerald-700/50 hover:border-emerald-600',
+    normal: 'border-l-blue-900',
+    warning: 'border-l-amber-500',
+    critical: 'border-l-red-700',
+    success: 'border-l-green-700',
   }[status]
 
   return (
     <div
-      className={`bg-aghat-navy-light/90 border rounded-lg p-4 shadow-md transition-all duration-200 backdrop-blur-sm ${statusBorder} ${className}`}
+      className={`bg-white border border-slate-200 border-l-4 rounded-lg p-4 shadow-sm ${statusBorder} ${className}`}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono font-medium text-slate-400 uppercase tracking-wider">{label}</span>
-        {icon && <div className="text-slate-400">{icon}</div>}
+        <span className="text-sm font-medium text-slate-600">{label}</span>
+        {icon && <div className="text-slate-500">{icon}</div>}
       </div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-bold font-mono tracking-tight text-white">{value}</span>
-        {subValue && <span className="text-xs text-slate-400 font-mono">{subValue}</span>}
+        <span className="text-2xl font-bold tracking-tight text-blue-950">{value}</span>
+        {subValue && <span className="text-xs text-slate-600">{subValue}</span>}
       </div>
       {trend && (
         <div className="mt-2 flex items-center gap-1.5 text-xs font-mono">
           <span
             className={
               trend.positive
-                ? 'text-emerald-400'
+                ? 'text-green-700'
                 : trend.direction === 'neutral'
-                ? 'text-slate-400'
-                : 'text-red-400'
+                ? 'text-slate-600'
+                : 'text-red-700'
             }
           >
             {trend.direction === 'up' ? '▲' : trend.direction === 'down' ? '▼' : '●'} {trend.value}
           </span>
-          <span className="text-slate-500">vs prev hour</span>
+          
         </div>
       )}
     </div>

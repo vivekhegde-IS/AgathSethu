@@ -107,7 +107,7 @@ member3/
 
 ```bash
 cd member3/backend
-python -m venv .venv
+py -3.11 -m venv .venv       # Python 3.11 is required for the pinned wheels
 .venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 
@@ -143,6 +143,16 @@ npm run dev
 App: http://localhost:5173
 
 ---
+
+## Live Camera Streaming (WebRTC)
+
+The Live page plays the three CARLA junction cameras as **H.264 over WebRTC**:
+
+- **Simulator (`member1/streaming`):** encodes each camera with FFmpeg (NVENC or x264, zero-latency, 1 s GOP) and pushes it over RTSP to **MediaMTX** (`media-server/`) on the website machine.
+- **Browser:** opens each stream with WHEP, signalled through the backend (`/api/streams/{cam}/whep`, website login required). Media goes directly from MediaMTX over UDP.
+- **Unchanged:** the JPEG WebSocket feed still serves RFID/ANPR and is the tile fallback.
+
+Setup, run order, verification and troubleshooting: [media-server/README-STREAMING.md](media-server/README-STREAMING.md).
 
 ## Demo Credentials
 

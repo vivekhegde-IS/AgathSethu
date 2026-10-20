@@ -19,7 +19,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="w-full space-y-1.5">
         {label && (
-          <label htmlFor={selectId} className="block text-xs font-medium text-slate-300 tracking-wide uppercase">
+          <label htmlFor={selectId} className="block text-sm font-medium text-slate-800">
             {label}
           </label>
         )}
@@ -28,16 +28,16 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <select
             ref={ref}
             id={selectId}
-            className={`w-full bg-[#121820] border ${
-              error ? 'border-red-500' : 'border-slate-700'
-            } rounded-md text-sm text-slate-100 py-2 ${
+            className={`w-full bg-white border ${
+              error ? 'border-red-500' : 'border-slate-300'
+            } rounded-md text-sm text-slate-900 py-2 ${
               leftIcon ? 'pl-9' : 'pl-3.5'
-            } pr-8 transition-colors focus:outline-none focus:border-aghat-blue focus:ring-1 focus:ring-aghat-blue appearance-none cursor-pointer ${className}`}
+            } pr-8 transition-colors focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 appearance-none cursor-pointer ${className}`}
             {...props}
           >
             {children ||
               options.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-aghat-navy-light text-slate-200">
+                <option key={opt.value} value={opt.value} className="bg-white text-slate-900">
                   {opt.label}
                 </option>
               ))}
@@ -48,7 +48,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </svg>
           </div>
         </div>
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-red-700">{error}</p>}
       </div>
     )
   }

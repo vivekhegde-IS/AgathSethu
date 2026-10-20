@@ -1,0 +1,28 @@
+# MediaMTX in Docker (alternative to run_mediamtx.ps1).
+#   docker compose --env-file .env up -d          (from member3/media-server)
+#
+# Notes
+# - Inside the container the WHEP listener must bind all interfaces, so the
+#   compose file overrides webrtcAddress; the host side is published on
+#   127.0.0.1 only, so the HTTP/WHEP API is still reachable only through the
+#   backend proxy.
+# - Docker's virtual network hides the host's addresses from MediaMTX: the
+#   host IPs viewers use MUST be listed in MTX_WEBRTCADDITIONALHOSTS (.env),
+#   e.g. "100.118.103.8,192.168.1.20".
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.1
+    container_name: aghat-mediamtx
+    restart: unless-stopped
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      MTX_AUTHINTERNALUSERS_0_PASS: ${MTX_AUTHINTERNALUSERS_0_PASS:?set it in .env}
+      MTX_AUTHINTERNALUSERS_1_PASS: ${MTX_AUTHINTERNALUSERS_1_PASS:?set it in .env}
+      MTX_WEBRTCADDITIONALHOSTS: ${MTX_WEBRTCADDITIONALHOSTS:-100.118.103.8}
+      MTX_WEBRTCADDRESS: ":8889"
+      MTX_WEBRTCIPSFROMINTERFACES: "false"
+    ports:
+      - "8554:8554/tcp"            # RTSP ingest from the CARLA machine
+      - "8189:8189/udp"            # WebRTC media to viewers
+      - "127.0.0.1:8889:8889/tcp"  # WHEP, backend proxy only

@@ -1,0 +1,171 @@
+{
+  "version": 2,
+  "created_at": "2026-10-16T11:18:41+00:00",
+  "source": "real CARLA runs (Member 1): NETRA_S1_runs_10-16, S2_runs_17-20, S3_runs_21-22; fields EM (unlabelled), clock-corrected; thresholds Learn-then-Test (Clopper-Pearson), per-group at delta/2; exported by claude try/export_backend_calibration.py",
+  "calibration_runs": [
+    "run_10",
+    "run_11",
+    "run_12",
+    "run_13",
+    "run_14",
+    "run_15",
+    "run_16",
+    "run_17",
+    "run_18",
+    "run_19",
+    "run_20",
+    "run_21",
+    "run_22"
+  ],
+  "layout_run": {
+    "dir": "run_10",
+    "run_id": "d24599ac-f7e9-4443-9308-0f7dc923f2e8",
+    "reader_positions_override": true,
+    "antennas_per_junction": 1
+  },
+  "alpha": 0.02,
+  "delta": 0.1,
+  "threshold": 0.5656412565230288,
+  "thresholds": {
+    "single": 0.5656412565230288,
+    "easy": 0.4592836578514725,
+    "hard": 0.8158569708815683
+  },
+  "hard_rule": {
+    "zone_m": 10.0,
+    "pad_s": 0.5,
+    "short_reads_max": 3
+  },
+  "clock": {
+    "online": true,
+    "default_tau": {
+      "J01": 0.0,
+      "J02": 0.15,
+      "J03": 0.15
+    }
+  },
+  "engine": {
+    "slot": 0.5,
+    "rho0": 0.001,
+    "pass_gap": 20.0,
+    "max_pass": 30.0,
+    "window": 20.0,
+    "pad": 2.0,
+    "p_undetected": 0.05,
+    "p_static": 0.01,
+    "phantom_speeds": [
+      3.0,
+      5.5,
+      8.0,
+      10.5,
+      13.0,
+      15.5,
+      18.0,
+      20.5,
+      23.0,
+      25.5
+    ],
+    "phantom_shifts": [
+      -1.0,
+      -0.5,
+      0.0,
+      0.5,
+      1.0
+    ]
+  },
+  "readers": {
+    "J01": {
+      "reader_id": "RFID_J01_01",
+      "cx": 20.000396975037898,
+      "cy": 4.000377248860533,
+      "w": [
+        2.7690666111156306,
+        0.007476304139055128,
+        -0.4344870896421181,
+        -2.6709840099155957,
+        -3.049825892908954,
+        0.1595460482922641,
+        -0.03446730202837268
+      ],
+      "tau": 0.0,
+      "link": "rate"
+    },
+    "J02": {
+      "reader_id": "RFID_J02_01",
+      "cx": 36.99966800988369,
+      "cy": -1.0002276581095664,
+      "w": [
+        3.339616567392419,
+        0.12172345165901768,
+        0.34371700904714353,
+        -2.7783067089876234,
+        -3.3497824140195345,
+        -0.6141577891717941,
+        -0.24553023630184312
+      ],
+      "tau": 0.0,
+      "link": "rate"
+    },
+    "J03": {
+      "reader_id": "RFID_J03_01",
+      "cx": 22.99983759465188,
+      "cy": -6.000409641767674,
+      "w": [
+        2.787876544477536,
+        -0.2245835650473694,
+        -0.36799225334329383,
+        -2.4936918195380198,
+        -2.337193498678527,
+        -0.42113138732309524,
+        -0.19091639205411393
+      ],
+      "tau": 0.0,
+      "link": "rate"
+    }
+  },
+  "cameras": {
+    "J01": {
+      "back_m": 20.000396975037898,
+      "lateral_m": 4.000377248860533,
+      "height_m": 5.0,
+      "pitch_down_deg": 15.0,
+      "fov_deg": 65.0,
+      "width_px": 1280,
+      "height_px": 720
+    },
+    "J02": {
+      "back_m": 36.99966800988369,
+      "lateral_m": -1.0002276581095664,
+      "height_m": 5.0,
+      "pitch_down_deg": 15.0,
+      "fov_deg": 65.0,
+      "width_px": 1280,
+      "height_px": 720
+    },
+    "J03": {
+      "back_m": 22.99983759465188,
+      "lateral_m": -6.000409641767674,
+      "height_m": 5.0,
+      "pitch_down_deg": 15.0,
+      "fov_deg": 65.0,
+      "width_px": 1280,
+      "height_px": 720
+    }
+  },
+  "antennas": {},
+  "report": {
+    "calibration_passes": 1376,
+    "single": {
+      "confirmed": 1003,
+      "wrong": 4,
+      "coverage": 0.7289244186046512,
+      "cp90_upper": 0.007953822190487632
+    },
+    "per_group": {
+      "confirmed": 922,
+      "wrong": 0,
+      "coverage": 0.6700581395348837,
+      "cp90_upper": 0.0024942649339569985
+    }
+  }
+}

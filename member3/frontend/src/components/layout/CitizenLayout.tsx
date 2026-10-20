@@ -5,7 +5,7 @@ import { Topbar } from './Topbar'
 
 export const CitizenLayout: React.FC = () => {
   return (
-    <div className="flex min-h-screen bg-[#0a0e14] text-white">
+    <div className="flex min-h-screen bg-slate-100 text-slate-900">
       <Sidebar portal="citizen" />
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar portal="citizen" />

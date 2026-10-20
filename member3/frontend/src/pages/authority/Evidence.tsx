@@ -1,85 +1,110 @@
-import React, { useState } from 'react'
-import { Card, Table, Badge, Button, Select, Column } from '@components/ui'
+import React, { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Badge, Button, Card, Column, Select, Table } from '@components/ui'
+import { ResolveIncidentModal } from '@components/authority/ResolveIncidentModal'
+import { BoardIncident, RecordsBoard, errorMessage, fetchRecords, formatIst, formatIstDate } from '@api/portal'
 
+const PAGE_SIZE = 25
+
+/** Today's date in IST as YYYY-MM-DD (the latest date that can be picked). */
+const todayIst = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
+
+/**
+ * Evidence Records: every crash incident (one row per incident; the evidence
+ * ID is the incident reference). Resolved incidents also live here after they
+ * leave the radar.
+ */
 export const EvidenceManager: React.FC = () => {
-  const [filterSource, setFilterSource] = useState('ALL')
+  const navigate = useNavigate()
+  const [status, setStatus] = useState<'all' | 'resolved' | 'unresolved'>('all')
+  const [page, setPage] = useState(1)
+  const [day, setDay] = useState('') // YYYY-MM-DD, '' = all dates
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('') // applied a moment after typing stops
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput.trim())
+      setPage(1)
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+  const [data, setData] = useState<RecordsBoard | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [resolving, setResolving] = useState<BoardIncident | null>(null)
 
-  const evidenceItems = [
-    {
-      id: 'EVID-2026-901',
-      incidentId: 'INC-20260901-01',
-      plate: 'KA03AB9012',
-      source: 'MEMBER_2_ANPR_CAMERA',
-      camera: 'CAM-J01-N',
-      hash: 'sha256:8fbc4e29bca71092eac44819d08311ab2479f',
-      timestamp: '2026-09-01 17:42:10',
-      status: 'VERIFIED',
-    },
-    {
-      id: 'EVID-2026-902',
-      incidentId: 'INC-20260901-01',
-      plate: 'KA03AB9012',
-      source: 'MEMBER_3_FASTAG_RFID',
-      camera: 'RFID-R01-KORM-N',
-      hash: 'sha256:39fa0812bdcc4891a92e1048bc8110029abff',
-      timestamp: '2026-09-01 17:42:09',
-      status: 'VERIFIED',
-    },
-    {
-      id: 'EVID-2026-903',
-      incidentId: 'INC-20260831-04',
-      plate: 'KA04MN9912',
-      source: 'MEMBER_1_CARLA_IMU',
-      camera: 'VEH-KA04MN9912-IMU',
-      hash: 'sha256:719ccba1238910028ba491823901bcda90128',
-      timestamp: '2026-08-31 14:10:02',
-      status: 'VERIFIED',
-    },
-  ]
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setData(await fetchRecords(status, page, PAGE_SIZE, day, search))
+      setError('')
+    } catch (err) {
+      setError(errorMessage(err, 'Could not load evidence records.'))
+    } finally {
+      setLoading(false)
+    }
+  }, [status, page, day, search])
 
-  const columns: Column<(typeof evidenceItems)[0]>[] = [
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
+
+  const columns: Column<BoardIncident>[] = [
     {
       header: 'EVIDENCE ID',
-      cell: (row) => <span className="font-mono font-semibold text-cyan-400">{row.id}</span>,
+      cell: (row) => <span className="font-mono font-semibold text-blue-800">{row.reference}</span>,
     },
     {
-      header: 'ASSOCIATED INCIDENT',
+      header: 'VEHICLES INVOLVED',
+      cell: (row) => {
+        const plates = row.involved_plates_display.filter(Boolean) as string[]
+        return plates.length ? (
+          <span className="font-mono text-slate-900 text-xs">{plates.join(' · ')}</span>
+        ) : (
+          <span className="text-xs text-slate-500">Not identified</span>
+        )
+      },
+    },
+    {
+      header: 'DATE & TIME OF CRASH',
       cell: (row) => (
         <div>
-          <span className="font-mono text-white text-xs">{row.incidentId}</span>
-          <p className="text-[10px] text-slate-400 font-mono">Plate: {row.plate}</p>
+          <span className="font-mono text-xs text-slate-800">{formatIst(row.created_at)}</span>
+          <p className="text-[10px] text-slate-600 font-mono">{row.location}</p>
         </div>
-      ),
-    },
-    {
-      header: 'SENSOR SOURCE',
-      cell: (row) => (
-        <Badge variant="brand" size="sm">
-          {row.source}
-        </Badge>
-      ),
-    },
-    {
-      header: 'CRYPTOGRAPHIC DIGEST',
-      cell: (row) => (
-        <span className="font-mono text-[10px] text-slate-400 truncate block max-w-xs">{row.hash}</span>
       ),
     },
     {
       header: 'STATUS',
       cell: (row) => (
-        <Badge variant="success" size="sm">
-          {row.status}
-        </Badge>
+        <div>
+          <Badge variant={row.resolved ? 'success' : 'danger'} size="sm">
+            {row.resolved ? 'Resolved' : 'Unresolved'}
+          </Badge>
+          {row.resolved && (
+            <p className="text-[10px] text-slate-600 font-mono mt-1">
+              by {row.resolved_by_name ?? '—'}, {formatIst(row.resolved_at)}
+            </p>
+          )}
+        </div>
       ),
     },
     {
       header: 'ACTION',
       className: 'text-right',
-      cell: () => (
-        <Button variant="secondary" size="sm" onClick={() => alert('Evidence verified with SHA-256 seal.')}>
-          Verify Hash
-        </Button>
+      cell: (row) => (
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => navigate(`/authority/evidence/${row.id}`)}>
+            View incident
+          </Button>
+          {!row.resolved && (
+            <Button variant="success" size="sm" onClick={() => setResolving(row)}>
+              Mark as resolved
+            </Button>
+          )}
+        </div>
       ),
     },
   ]
@@ -88,33 +113,110 @@ export const EvidenceManager: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold font-mono text-white">Cryptographic Evidence Vault</h2>
-          <p className="text-xs text-slate-400 font-mono">
-            Tamper-proof storage of ANPR video snapshots, FASTag transponder events, and physics telemetry.
-          </p>
+          <h2 className="text-2xl font-semibold text-blue-950">Evidence Records</h2>
+          <p className="text-sm text-slate-600">All recorded crash incidents and their resolution status.</p>
         </div>
-
-        <div className="w-56">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label htmlFor="records-search" className="block text-sm font-medium text-slate-800">
+              Search
+            </label>
+            <input
+              id="records-search"
+              type="search"
+              placeholder="Incident ID or number plate"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
+              maxLength={40}
+              className="mt-1.5 w-60 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-mono text-slate-900 placeholder:font-sans placeholder-slate-400 focus:border-blue-800 focus:outline-none focus:ring-1 focus:ring-blue-800"
+            />
+          </div>
+          <div>
+            <label htmlFor="records-date" className="block text-sm font-medium text-slate-800">
+              Crash date
+            </label>
+            <div className="mt-1.5 flex items-center gap-2">
+              <input
+                id="records-date"
+                type="date"
+                value={day}
+                max={todayIst()}
+                onChange={(e) => {
+                  setDay(e.target.value)
+                  setPage(1)
+                }}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-800 focus:outline-none focus:ring-1 focus:ring-blue-800"
+              />
+              {day && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDay('')
+                    setPage(1)
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="w-48">
           <Select
-            value={filterSource}
-            onChange={(e) => setFilterSource(e.target.value)}
+            aria-label="Filter by status"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value as typeof status)
+              setPage(1)
+            }}
             options={[
-              { value: 'ALL', label: 'All Sensor Sources' },
-              { value: 'MEMBER_2_ANPR_CAMERA', label: 'Optical ANPR Camera' },
-              { value: 'MEMBER_3_FASTAG_RFID', label: 'FASTag RFID Gantry' },
-              { value: 'MEMBER_1_CARLA_IMU', label: 'CARLA IMU Telemetry' },
+              { value: 'all', label: 'All incidents' },
+              { value: 'unresolved', label: 'Unresolved' },
+              { value: 'resolved', label: 'Resolved' },
             ]}
           />
+          </div>
         </div>
       </div>
 
-      <Card title="Secured Evidence Dossiers">
+      {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{error}</div>}
+
+      <Card
+        title={
+          data
+            ? `${search ? `Incidents matching ${search}` : 'Incidents'}${day ? ` on ${formatIstDate(`${day}T12:00:00+05:30`)}` : ''} (${data.total})`
+            : 'Incidents'
+        }
+      >
         <Table
           columns={columns}
-          data={evidenceItems}
+          data={data?.items ?? []}
           keyExtractor={(row) => row.id}
+          isLoading={loading && !data}
+          emptyMessage={
+            search
+              ? `No incidents match "${search}"${day ? ' on this date' : ''}.`
+              : day
+                ? 'No incidents on this date.'
+                : 'No incidents recorded.'
+          }
         />
+        {data && data.total > PAGE_SIZE && (
+          <div className="flex items-center justify-end gap-3 pt-3 text-xs font-mono text-slate-600">
+            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              ← Previous
+            </Button>
+            <span>
+              Page {page} of {pages}
+            </span>
+            <Button variant="ghost" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+              Next →
+            </Button>
+          </div>
+        )}
       </Card>
+
+      <ResolveIncidentModal incident={resolving} onClose={() => setResolving(null)} onResolved={load} />
     </div>
   )
 }

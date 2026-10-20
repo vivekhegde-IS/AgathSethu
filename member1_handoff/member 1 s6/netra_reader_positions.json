@@ -1,0 +1,26 @@
+{
+  "_comment": "NETRA test layout: per junction, the reader position whose 10 m read zone is >= 95 % inside the camera image, maximising moving traffic (GPS >= 10 km/h within 5 m) minus stopped traffic (< 2 km/h within 10 m), from runs 01-09. Use with RFID_READER_POSITIONS_FILE.",
+  "readers": {
+    "J01": {
+      "x": -43.694,
+      "y": 26.063,
+      "ahead_of_camera_m": 20.0,
+      "right_of_camera_m": 4.0,
+      "zone_10m_in_view": 0.958
+    },
+    "J02": {
+      "x": -48.608,
+      "y": 70.62,
+      "ahead_of_camera_m": 37.0,
+      "right_of_camera_m": -1.0,
+      "zone_10m_in_view": 1.0
+    },
+    "J03": {
+      "x": -68.904,
+      "y": 130.806,
+      "ahead_of_camera_m": 23.0,
+      "right_of_camera_m": -6.0,
+      "zone_10m_in_view": 0.955
+    }
+  }
+}

@@ -28,19 +28,19 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`bg-aghat-navy-light border border-slate-800/80 rounded-lg overflow-hidden shadow-lg backdrop-blur-sm transition-all duration-200 ${
-        interactive ? 'cursor-pointer hover:border-aghat-blue/60 hover:shadow-glow hover:-translate-y-0.5' : ''
-      } ${glow ? 'border-aghat-blue/50 shadow-glow' : ''} ${className}`}
+      className={`bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm transition-all duration-200 ${
+        interactive ? 'cursor-pointer hover:border-blue-800 hover:shadow-md' : ''
+      } ${glow ? '' : ''} ${className}`}
     >
       {(title || actions || subtitle) && (
-        <div className={`px-5 py-4 border-b border-slate-800/80 flex items-center justify-between ${headerClassName}`}>
+        <div className={`px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 ${headerClassName}`}>
           <div>
             {title && (
-              <h3 className="text-sm font-semibold text-white tracking-wide uppercase flex items-center gap-2">
+              <h3 className="text-base font-semibold text-blue-950 flex items-center gap-2">
                 {title}
               </h3>
             )}
-            {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-slate-600 mt-0.5">{subtitle}</p>}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>

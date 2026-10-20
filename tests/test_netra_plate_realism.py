@@ -1,4 +1,4 @@
-"""member1_handoff/member 1 s9/netra_plate_realism.py (no CARLA needed)."""
+"""member1/netra/netra_plate_realism.py (no CARLA needed)."""
 from __future__ import annotations
 
 import importlib
@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "member1_handoff" / "member 1 s9"))
+sys.path.insert(0, str(ROOT / "member1" / "netra"))
 
 
 def _load(monkeypatch, on):

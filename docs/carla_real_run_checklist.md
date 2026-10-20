@@ -7,8 +7,7 @@ backend, which receives the stream and records it.
 
 **Member 1's laptop**
 
-1. Use `member1/full_run.py` from this repo (V29 + change 5), or patch their
-   copy: see `member1_handoff/README.md` -> Change 5.
+1. Use `member1/full_run.py` from this repo (V29 + change 5).
 2. Copy `rfid_reader_model.py` (repo root) **next to** `full_run.py`.
 3. Point it at this backend (same as before):
    `set CARLA_EVIDENCE_WS=ws://<this laptop's IP>:8001/ws/carla/cameras`

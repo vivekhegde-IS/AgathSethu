@@ -294,7 +294,7 @@ class RfidCrossVerification:
             self._note_error(exc)
 
     def on_vehicle_boxes(self, message: dict) -> None:
-        """20 Hz box-only message (member1_handoff/netra_sensor_upgrades.py):
+        """20 Hz box-only message (member1/netra/netra_sensor_upgrades.py):
         camera boxes for NETRA only. Nothing else uses it."""
         if self.netra_live is None:
             return

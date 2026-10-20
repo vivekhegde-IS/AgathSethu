@@ -386,7 +386,7 @@ async def carla_camera_ingestion(websocket: WebSocket):
                     _rfid_call("on_vehicle_state", message)
 
             elif message_type == "vehicle_boxes":
-                # 20 Hz box-only messages (member1_handoff/netra_sensor_upgrades.py):
+                # 20 Hz box-only messages (member1/netra/netra_sensor_upgrades.py):
                 # NETRA's camera input (no-op unless RFID_NETRA_ENABLED).
                 _rfid_call("on_vehicle_boxes", message)
 

@@ -1,4 +1,4 @@
-"""Pure parts of member1_handoff/netra_sensor_upgrades.py (no CARLA needed)."""
+"""Pure parts of member1/netra/netra_sensor_upgrades.py (no CARLA needed)."""
 from __future__ import annotations
 
 import csv
@@ -10,8 +10,7 @@ from types import SimpleNamespace
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "member1_handoff"))
-sys.path.insert(0, str(ROOT / "member1_handoff" / "member 1 s6"))   # where the S6 handoff now lives
+sys.path.insert(0, str(ROOT / "member1" / "netra"))
 
 
 def _load(monkeypatch, **env):

@@ -18,6 +18,7 @@ vehicle's plate is never used as a fallback.
 
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -57,6 +58,9 @@ class FrameRef:
     # only): [{"vehicle_id": "B", "bbox": [x1, y1, x2, y2], "depth_m": 31.2}].
     # None = the sender does not provide it (older CARLA script).
     vehicles: list | None = None
+    # wall clock (epoch seconds) when the backend received the frame: the real
+    # time printed on evidence images (sim time runs slower than real time)
+    received_at: float = field(default_factory=time.time)
 
     @property
     def size(self) -> int:

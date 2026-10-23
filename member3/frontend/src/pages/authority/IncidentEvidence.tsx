@@ -3,8 +3,11 @@
  *
  * Opened only from an incident on the Crash Incident Radar or a row in
  * Evidence Records (not in the sidebar). Shows the crash, the involved
- * vehicles, the crash-zone RFID snapshot, next-junction sightings with the
- * camera plate verdict, and the stored evidence images. Refreshes live on the
+ * vehicles, the crash-zone RFID snapshot (the route map is on its own
+ * page, opened by the Multi-junction tracking button),
+ * next-junction sightings with the camera plate verdict (and the strict
+ * partial plate where the camera could not confirm it), and the stored
+ * evidence images. Refreshes live on the
  * portal events incident_created / watchlist_rfid_hit / vision_match_result.
  */
 
@@ -12,6 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AuthImage, Badge, Button, Card, Spinner } from '@components/ui'
 import { ResolveIncidentModal } from '@components/authority/ResolveIncidentModal'
+import { CrashTypeBadge } from '@components/authority/CrashTypeBadge'
 import { subscribeToLiveCameraMessages } from '@services/websocket/liveCamerasSocket'
 import { errorMessage, formatIst } from '@api/portal'
 import {
@@ -19,6 +23,7 @@ import {
   INCIDENT_EVIDENCE_EVENTS,
   IncidentDetail,
   JunctionEvidence,
+  PartialPlate,
   SightingView,
   VisionStatus,
   getIncident,
@@ -94,9 +99,12 @@ export const IncidentEvidencePage: React.FC = () => {
           <div className="flex items-center gap-2 mt-2">
             <h2 className="text-2xl font-semibold text-blue-950">Incident Evidence · {reference}</h2>
             {incident && (
-              <Badge variant={resolved ? 'success' : 'danger'} size="sm">
-                {resolved ? 'Resolved' : 'Unresolved'}
-              </Badge>
+              <>
+                <Badge variant={resolved ? 'success' : 'danger'} size="sm">
+                  {resolved ? 'Resolved' : 'Unresolved'}
+                </Badge>
+                <CrashTypeBadge kind={incident} />
+              </>
             )}
           </div>
           {incident && (
@@ -110,18 +118,25 @@ export const IncidentEvidencePage: React.FC = () => {
             <p className="text-xs text-emerald-700 font-mono mt-1">Note: {incident.resolution_note}</p>
           )}
         </div>
-        {incident && !resolved && (
+        {incident && (
           <div className="flex gap-2">
-            {Boolean(incident.live_feed) && incident.crash_junction && (
+            <Link to={`/authority/evidence/${encodeURIComponent(String(incident.id))}/tracking`}>
+              <Button variant="primary" size="sm">
+                Multi-junction tracking →
+              </Button>
+            </Link>
+            {!resolved && Boolean(incident.live_feed) && incident.crash_junction && (
               <Link to={`/authority/live?junction=${encodeURIComponent(incident.crash_junction)}`}>
                 <Button variant="outline" size="sm">
                   View live feed
                 </Button>
               </Link>
             )}
-            <Button variant="success" size="sm" onClick={() => setResolving(true)}>
-              Mark as resolved
-            </Button>
+            {!resolved && (
+              <Button variant="success" size="sm" onClick={() => setResolving(true)}>
+                Mark as resolved
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -410,6 +425,7 @@ const JunctionEvidenceCard: React.FC<{
           <p className="text-slate-500">
             {card.supporting.candidate_reads} candidate read(s) of the suspect at this junction
           </p>
+          {card.partial_plate && <PartialPlateBox partial={card.partial_plate} />}
           {(total > 0 || sightings.length > 0) && (
             <button
               onClick={() => setShowAll((value) => !value)}
@@ -456,6 +472,46 @@ const JunctionEvidenceCard: React.FC<{
     </div>
   )
 }
+
+/** The pattern with unread characters highlighted: _ (one), * (0-2), + (0-1). */
+const Pattern: React.FC<{ value: string }> = ({ value }) => (
+  <span className="font-mono text-base font-bold tracking-widest">
+    {value.split('').map((ch, i) => (
+      <span key={i} className={'_*+'.includes(ch) ? 'text-amber-700' : 'text-slate-900'}>
+        {ch}
+      </span>
+    ))}
+  </span>
+)
+
+/** Camera could not confirm the RFID plate here: what it partly read, and the registered plates that fit. */
+const PartialPlateBox: React.FC<{ partial: PartialPlate }> = ({ partial }) => (
+  <div className="rounded border border-amber-300 bg-amber-50 p-2 space-y-1">
+    <p className="text-slate-500 uppercase">Partial plate (camera)</p>
+    <Pattern value={partial.pattern} />
+    <p className="text-slate-600">
+      unread: <span className="text-amber-700">_</span> one, <span className="text-amber-700">*</span> 0–2,{' '}
+      <span className="text-amber-700">+</span> 0–1
+      {partial.frames_used != null && ` · ${partial.frames_used} frame(s)`}
+    </p>
+    {partial.alternative_patterns.length > 0 && (
+      <p className="text-slate-500">Other layouts: {partial.alternative_patterns.join(' · ')}</p>
+    )}
+    <p className="text-slate-500 uppercase pt-1">Registered plates that fit ({partial.candidates.length})</p>
+    {partial.candidates.length === 0 ? (
+      <p className="text-slate-500">No registered vehicle matches.</p>
+    ) : (
+      <div className="flex flex-wrap gap-1">
+        {partial.candidates.map((c) => (
+          <span key={`${c.source}-${c.plate}`} className="px-1.5 py-0.5 bg-white border border-cyan-200 rounded text-blue-800"
+                title={c.epc ? `RFID ${c.epc}` : 'citizen vehicle registry'}>
+            {c.plate} <span className="text-slate-500">{c.score.toFixed(2)}</span>
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+)
 
 const SightingRow: React.FC<{
   sighting: SightingView

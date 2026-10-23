@@ -7,7 +7,10 @@ never arrival or emission time.
   GET /api/incidents                        runs (grouped), filter by source, paginated
   GET /api/incidents/{id}                   full timeline + snapshot panels + sighting cards
   GET /api/incidents/{id}/tracks            per watchlist vehicle: crash zone -> junctions
+  GET /api/incidents/{id}/junctions/{jid}   one junction of the route: fled vehicle's
+                                            ANPR evidence there + registered owner
   GET /api/incidents/{id}/evidence/{eid}    streams one evidence image
+  GET /api/incidents/{id}/evidence/{eid}/vehicle   the suspect vehicle cropped from a frame
   GET /api/rfid/health                      what the RFID FUSION badge shows
 """
 
@@ -20,7 +23,7 @@ from pathlib import Path
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, exists, func, or_, true
 from sqlalchemy.orm import Session
@@ -37,10 +40,14 @@ from app.models.models import (
     IncidentVehicle,
     RfidSighting,
     User,
+    Vehicle,
     VisionMatch,
 )
+from app.services.anpr_partial import analyze_reads as analyze_partial_plate
+from app.services.anpr_partial import known_char_count, match_pattern
+from app.services.fine_service import registry_candidates, rfid_registry_candidates
 from app.services.plate_validation import STATE_CODES, format_plate
-from app.services.rfid.config import JUNCTION_WORLD, ROLE_FLED, STATUS_RANK
+from app.services.rfid.config import JUNCTION_WORLD, ROLE_FLED, ROLE_INVOLVED, STATUS_RANK
 from app.services.notification_service import IST, incident_reference, junction_label
 from app.services.rfid.evidence import KIND_PRIMARY, KIND_PRIMARY_PLATE, KIND_PRIMARY_RAW
 
@@ -68,6 +75,40 @@ def _run_label(started_at, crash_ts_sim) -> str:
 
 def _state(plate: str | None) -> str | None:
     return STATE_CODES.get((plate or "")[:2])
+
+
+# Member 1's crash_alert statuses (NETRA v1.8, README section 4.3)
+STATUS_TWO_CAR = ("COLLISION_EVENT_CONFIRMED_IMU_GPS", "COLLISION_EVENT_CONFIRMED_PARTNER_ASSOCIATION")
+STATUS_SINGLE = "COLLISION_EVENT_SINGLE_VEHICLE"
+
+
+def _crash_kind(db: Session, incident: Incident, vehicles) -> dict:
+    """Two-car / multi-vehicle / single-vehicle, and hit-and-run.
+
+    A pair alert (or two crashed vehicles) makes it a multi-vehicle crash; a
+    chain crash arrives as pairs sharing a car and is already merged into one
+    incident, so the vehicle count gives its size. Only SINGLE_VEHICLE alerts
+    and one crashed car make it single-vehicle. Hit-and-run = a multi-vehicle
+    crash where a crashed car later left the scene (Member 1's escape report).
+    """
+    statuses = {status for (status,) in db.query(IncidentAlert.status)
+                .filter(IncidentAlert.incident_id == incident.id) if status}
+    crashed = {v.plate_norm for v in vehicles if v.role == ROLE_INVOLVED and v.plate_norm}
+    left = {v.plate_norm for v in vehicles if v.role == ROLE_FLED and v.plate_norm}
+    if statuses & set(STATUS_TWO_CAR) or len(crashed) >= 2:
+        kind = "two_car" if len(crashed) <= 2 else "multi_vehicle"
+    elif crashed and statuses <= {STATUS_SINGLE} and statuses:
+        kind = "single_vehicle"
+    elif len(crashed) == 1 and not statuses:
+        kind = "single_vehicle"
+    else:
+        kind = "unknown"
+    return {
+        "crash_type": kind,
+        "crashed_vehicle_count": len(crashed),
+        "hit_and_run": kind in ("two_car", "multi_vehicle") and bool(left),
+        "left_scene_plates": sorted(left),
+    }
 
 
 def _incident_summary(db: Session, incident: Incident) -> dict:
@@ -103,6 +144,7 @@ def _incident_summary(db: Session, incident: Incident) -> dict:
         "sighting_count": len(sightings),
         "vision_confirmed": sum(1 for status in statuses if status == "VISION_CONFIRMED"),
         "vision_probable": sum(1 for status in statuses if status == "PROBABLE_MATCH"),
+        **_crash_kind(db, incident, vehicles),
         **_resolution(db, incident, vehicles),
     }
 
@@ -393,7 +435,8 @@ def _suspect_reads(match, vehicle_id: str | None) -> list[dict]:
                 continue
             reads.append({"ts": frame.get("ts"), "raw": read.get("raw"),
                           "corrected": read.get("corrected"), "valid": read.get("valid"),
-                          "mean_conf": read.get("mean_conf"), "width_px": read.get("width_px"),
+                          "mean_conf": read.get("mean_conf"), "char_conf": read.get("char_conf"),
+                          "width_px": read.get("width_px"),
                           "det_confidence": read.get("det_confidence")})
     return reads
 
@@ -494,6 +537,47 @@ def best_evidence_by_junction(incident_id: str, sightings, matches: dict, files_
     return sorted(cards, key=lambda card: (card["first_seen_ts"], card["junction_id"]))
 
 
+def junction_partial_plate(db: Session, card: dict) -> dict | None:
+    """Strict partial plate of the suspect at one junction, only when the
+    camera did not confirm the RFID plate there (RFID missing, unregistered or
+    contradicted). Built from the suspect's stored reads; a read without
+    per-character confidences uses its mean for every character. Unread
+    characters are marked, never guessed. None when nothing was read."""
+    if card["status"] == "VISION_CONFIRMED":
+        return None
+    reads = []
+    for read in card["supporting"]["candidates"]:
+        text = read.get("raw") or read.get("corrected")
+        if not text:
+            continue
+        confs = read.get("char_conf") or []
+        if read.get("corrected") and len(confs) == len(read["corrected"]):
+            text = read["corrected"]
+        else:
+            confs = [read.get("mean_conf") or 0.0] * len(text)
+        reads.append({"text": text, "confidences": confs, "frame": read.get("ts"),
+                      "track_id": f"{card['junction_id']}-{card['suspect_vehicle_id'] or card['epc']}"})
+    if not reads:
+        return None
+    partial = analyze_partial_plate(reads)
+    pattern = partial.get("partial_pattern") or ""
+    if known_char_count(pattern) == 0:
+        return None
+    # a layout with nothing read fits every plate: it never makes a candidate
+    informative = [p for p in [pattern, *(partial.get("alternative_patterns") or [])] if known_char_count(p)]
+    citizens = [{**c, "source": "vehicles"} for c in registry_candidates(db, partial)]
+    candidates = [c for c in rfid_registry_candidates(db, partial) + citizens
+                  if any(match_pattern(p, c["plate"]) > 0 for p in informative)]
+    return {
+        "pattern": pattern,
+        "alternative_patterns": informative[1:],
+        "is_complete": bool(partial.get("is_complete")),
+        "confidence": partial.get("confidence"),
+        "frames_used": partial.get("frames_used"),
+        "candidates": sorted(candidates, key=lambda c: (-c["score"], c["plate"]))[:30],
+    }
+
+
 BASIS_ESCAPE = ("Member 1 escape detection: kept moving after the crash "
                 "(>= 5 km/h, >= 8 m from its crash point)")
 BASIS_SIGHTING = "its RFID tag was read at another junction after the crash"
@@ -549,6 +633,9 @@ def _sighting_payload(sighting: RfidSighting, match, files, incident_id) -> dict
         "reader_id": sighting.reader_id,
         "first_seen_ts": sighting.first_seen_ts,
         "last_seen_ts": sighting.last_seen_ts,
+        # wall clock when the tag was first read here (the row is written on the
+        # first read); sim time runs slower than real time, so never derive it
+        "seen_at": _iso(sighting.created_at),
         "report_count": sighting.report_count,
         "tag_seen_count": sighting.tag_seen_count,
         "peak_rssi_dbm": sighting.peak_rssi_dbm,
@@ -620,6 +707,8 @@ def _detail(db: Session, incident: Incident) -> dict:
     cards = best_evidence_by_junction(
         incident_id, [s for s in sightings if s.epc in suspect_epcs], matches, by_match,
         {vehicle.epc: vehicle.sim_vehicle_id for vehicle in vehicles if vehicle.epc})
+    for card in cards:
+        card["partial_plate"] = junction_partial_plate(db, card)
     return {
         "incident": _incident_summary(db, incident) | {"description": incident.description},
         "evidence_url_template": f"/api/incidents/{incident_id}/evidence/{{evidence_id}}",
@@ -634,6 +723,8 @@ def _detail(db: Session, incident: Incident) -> dict:
             # an involved plate always exists; what can be missing is its tag
             "registry": "REGISTERED" if row.epc else "NOT_IN_REGISTRY",
             "fled": row.plate_norm in fled_plates,
+            # citizen who registered the plate (None when nobody has)
+            "owner_name": (_registered_owner(db, row.plate_norm) or {}).get("name"),
         } for row in vehicles],
         "snapshots": snapshots,
         # older single-panel shape, kept for callers that used it
@@ -648,6 +739,9 @@ def _detail(db: Session, incident: Incident) -> dict:
         # (other vehicles never get a card)
         "best_evidence_by_junction": cards,
         "fleeing_vehicles": [fleeing_vehicle_summary(suspect, cards) for suspect in suspects],
+        # world (x, y) of every junction, for the tracking map
+        "junction_positions": {junction: {"x": x, "y": y, "label": junction_label(junction)}
+                               for junction, (x, y) in JUNCTION_WORLD.items()},
     }
 
 
@@ -682,6 +776,119 @@ async def get_tracks(incident_id: str, db: Session = Depends(get_db)):
                        "plate_display": vehicle["plate_display"],
                        "state_name": vehicle["state_name"], "steps": steps})
     return {"incident": incident, "snapshots": detail["snapshots"], "tracks": tracks}
+
+
+def _registered_owner(db: Session, plate_norm: str | None) -> dict | None:
+    """The citizen who registered this plate, with the vehicle details on file."""
+    if not plate_norm:
+        return None
+    row = (db.query(Vehicle, User).join(User, User.id == Vehicle.owner_id)
+           .filter(Vehicle.plate_number == plate_norm, Vehicle.is_active.is_(True)).first())
+    if row is None:
+        return None
+    vehicle, owner = row
+    return {
+        "name": owner.full_name, "phone": owner.phone, "email": owner.email,
+        "vehicle": {"make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
+                    "color": vehicle.color, "vehicle_type": vehicle.vehicle_type,
+                    "fastag_id": vehicle.fastag_id},
+    }
+
+
+def _suspect_box(db: Session, row: EvidenceFile) -> list | None:
+    """The suspect's image box in the frame this evidence file was cut from."""
+    if row.vision_match_id is None or row.frame_ts is None:
+        return None
+    match = db.get(VisionMatch, row.vision_match_id)
+    for frame in (match.per_frame or []) if match is not None else []:
+        if frame.get("ts") is not None and abs(frame["ts"] - row.frame_ts) < 0.01:
+            return frame.get("suspect_box")
+    return None
+
+
+@router.get("/{incident_id}/junctions/{junction_id}")
+async def get_junction(incident_id: str, junction_id: str, db: Session = Depends(get_db)):
+    """One junction of the crash route: for each fled vehicle seen there, its
+    RFID reads (real time), the ANPR evidence card, a crop of the vehicle and
+    the registered owner. At the crash junction, the crash frames."""
+    detail = _detail(db, _load(db, incident_id))
+    incident = detail["incident"]
+    junction_id = junction_id.upper()
+    if junction_id not in JUNCTION_WORLD and junction_id != incident["crash_junction"]:
+        raise HTTPException(status_code=404, detail="Unknown junction.")
+    is_crash = junction_id == incident["crash_junction"]
+
+    fled = bool(detail["fleeing_vehicles"])
+    suspects = detail["fleeing_vehicles"]
+    if not fled:
+        # nobody reported fled: every involved vehicle read at this junction
+        sighted = {s["epc"] for s in detail["sightings"] if s["junction_id"] == junction_id}
+        suspects = [{"plate_norm": v["plate_norm"], "plate_display": v["plate_display"],
+                     "state_name": v["state_name"], "epc": v["epc"], "basis": None}
+                    for v in detail["involved_vehicles"] if v["epc"] and v["epc"] in sighted]
+
+    vehicles = []
+    for suspect in suspects:
+        sightings = [s for s in detail["sightings"]
+                     if s["epc"] == suspect["epc"] and s["junction_id"] == junction_id]
+        card = next((c for c in detail["best_evidence_by_junction"]
+                     if c["epc"] == suspect["epc"] and c["junction_id"] == junction_id), None)
+        if not (sightings or card or is_crash):
+            continue        # this vehicle was never read here
+        # vehicle crop: the best frame first, else any other frame of it here
+        vehicle_image = None
+        primary = (card or {}).get("primary") or {}
+        sources = [primary.get("raw_frame"), primary.get("image"),
+                   *((card or {}).get("supporting") or {}).get("images", [])]
+        for source in filter(None, sources):
+            row = db.get(EvidenceFile, source["id"])
+            if row is not None and _suspect_box(db, row):
+                vehicle_image = f"/api/incidents/{incident['id']}/evidence/{row.id}/vehicle"
+                break
+        vehicles.append({
+            "plate_norm": suspect["plate_norm"],
+            "plate_display": suspect.get("plate_display") or format_plate(suspect["plate_norm"]),
+            "state_name": suspect.get("state_name") or _state(suspect["plate_norm"]),
+            "epc": suspect["epc"],
+            "fled": fled,
+            "basis": suspect.get("basis"),
+            "sightings": sightings,
+            "evidence": card,
+            "vehicle_image": vehicle_image,
+            "owner": _registered_owner(db, suspect["plate_norm"]),
+        })
+    return {
+        "incident": incident,
+        "junction": {"id": junction_id, "label": junction_label(junction_id), "is_crash": is_crash},
+        "crash_frames": detail["crash_frames"] if is_crash else [],
+        "vehicles": vehicles,
+    }
+
+
+@router.get("/{incident_id}/evidence/{evidence_id}/vehicle")
+async def get_vehicle_crop(incident_id: str, evidence_id: str, db: Session = Depends(get_db)):
+    """The suspect vehicle cut out of one evidence frame (its projected box, padded)."""
+    import cv2
+
+    row = db.get(EvidenceFile, evidence_id)
+    if row is None or str(row.incident_id) != str(incident_id):
+        raise HTTPException(status_code=404, detail="Evidence not found.")
+    box = _suspect_box(db, row)
+    path = Path(row.path).resolve()
+    image = cv2.imread(str(path)) if box and path.is_file() else None
+    if image is None:
+        raise HTTPException(status_code=404, detail="No vehicle box for this frame.")
+    height, width = image.shape[:2]
+    x1, y1, x2, y2 = (float(v) for v in box)
+    pad_x, pad_y = (x2 - x1) * 0.08, (y2 - y1) * 0.08
+    x1, y1 = max(0, int(x1 - pad_x)), max(0, int(y1 - pad_y))
+    x2, y2 = min(width, int(x2 + pad_x)), min(height, int(y2 + pad_y))
+    if x2 - x1 < 8 or y2 - y1 < 8:
+        raise HTTPException(status_code=404, detail="The vehicle box is outside the frame.")
+    ok, jpeg = cv2.imencode(".jpg", image[y1:y2, x1:x2], [cv2.IMWRITE_JPEG_QUALITY, 92])
+    if not ok:
+        raise HTTPException(status_code=500, detail="Could not encode the vehicle image.")
+    return Response(content=jpeg.tobytes(), media_type="image/jpeg")
 
 
 @router.get("/{incident_id}/evidence/{evidence_id}")

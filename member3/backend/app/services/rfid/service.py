@@ -23,6 +23,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import cv2
 import numpy as np
@@ -101,6 +102,14 @@ def _float_or_none(value) -> float | None:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _real_time(ref) -> str:
+    """Real (IST) time a frame reached the backend, for the evidence footer."""
+    return datetime.fromtimestamp(ref.received_at, IST).strftime("%d %b %Y %H:%M:%S IST")
 
 
 class RfidCrossVerification:
@@ -1025,7 +1034,7 @@ class RfidCrossVerification:
             plate_label=(format_plate(plates[0]) if plates else None) if kind == KIND_CRASH else label,
             second_line=(f"{label} | plates read: {', '.join(plates)}" if plates else label),
             footer=f"{junction} | frame {ref.frame_no if ref.frame_no is not None else '?'} | "
-                   f"t={ref.timestamp_sim:.2f}s")
+                   f"{_real_time(ref)}")
         saved = self.evidence.save_jpeg(incident.incident_id, junction, kind,
                                         f"{kind}_{int(ref.timestamp_sim * 1000)}", image)
         if saved is not None:
@@ -1230,7 +1239,7 @@ class RfidCrossVerification:
 
     def _footer(self, sighting, ref) -> str:
         frame_no = ref.frame_no if ref.frame_no is not None else "?"
-        return f"{sighting.junction_id} | frame {frame_no} | t={ref.timestamp_sim:.2f}s"
+        return f"{sighting.junction_id} | frame {frame_no} | {_real_time(ref)}"
 
     def _save_hero(self, incident, sighting, outcome, ref, rule, frame, rfid_plate, status,
                    match_id) -> None:

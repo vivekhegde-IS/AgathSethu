@@ -19,7 +19,6 @@ from app.routers import citizen_account
 from app.routers import carla_ws
 from app.routers import incidents
 from app.routers import citizen_fines
-from app.routers import pending_verification
 from app.routers import routine_violation
 from app.routers import webrtc_streams
 
@@ -33,14 +32,16 @@ async def lifespan(app: FastAPI):
         f"env: {settings.APP_ENV}"
     )
 
-    # Load + warm up the routine-violation models once, in the background, so
-    # the first upload does not pay model load / iGPU kernel compile time.
-    routine_violation.start_model_warm_up()
-
-    # Same for the ANPR plate adapter used by RFID cross-verification: load and
-    # warm it once here, then every detect_and_read() call reuses the session.
+    # Load + warm up, once and in the background, the routine-violation models
+    # (so the first upload does not pay model load / iGPU kernel compile time)
+    # and the ANPR plate adapter used by RFID cross-verification (every
+    # detect_and_read() call then reuses the session). ONE thread, one after
+    # the other: two OpenVINO warm-ups running at the same time deadlocked the
+    # whole process (each held the GIL or an OpenVINO lock the other needed),
+    # and the backend stopped answering every request.
     # Never fatal - a missing model must not stop the backend from starting.
-    def _warm_anpr():
+    def _warm_models():
+        routine_violation.warm_models()
         try:
             from app.services.anpr_adapter import get_anpr_adapter
 
@@ -48,7 +49,7 @@ async def lifespan(app: FastAPI):
         except Exception as error:
             print(f"[ANPR] warm-up failed: {error}", flush=True)
 
-    threading.Thread(target=_warm_anpr, name="anpr-warm-up", daemon=True).start()
+    threading.Thread(target=_warm_models, name="model-warm-up", daemon=True).start()
 
     # RFID cross-verification: build the service (loads the EPC registry from
     # Postgres) and start its ticker before the first CARLA message arrives.
@@ -139,9 +140,6 @@ app.include_router(routine_violation.router)
 
 # Citizen fines issued from routine-violation videos (existing citizen login)
 app.include_router(citizen_fines.router)
-
-# Partial-plate violations awaiting RFID fusion / authority review (authority only)
-app.include_router(pending_verification.router)
 
 # WebRTC camera streams: WHEP signalling proxy to MediaMTX (authority only)
 app.include_router(webrtc_streams.router)

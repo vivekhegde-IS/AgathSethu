@@ -26,7 +26,7 @@ import cv2
 
 from app.core.config import data_dir
 from app.core.database import SessionLocal
-from app.models.citizen_fines import Fine, PendingVerification, UnmatchedViolation, Video
+from app.models.citizen_fines import Fine, UnmatchedViolation, Video
 from app.services.anpr_partial import known_char_count, match_pattern
 from app.models.models import User, Vehicle
 from app.services.notification_service import notify_fine_issued
@@ -43,7 +43,7 @@ FINE_AMOUNTS = {"NO HELMET": 1000.0, "TRIPLE RIDING": 1000.0}
 DEFAULT_FINE_AMOUNT = 500.0
 # A pipeline-CONFIRMED plate is fined as before. When True, it is fined only if
 # the strict partial ANPR (app/services/anpr_partial.py) read the same complete
-# plate with no frame conflicts; otherwise it goes to pending_verification.
+# plate with no frame conflicts; otherwise it is recorded as an unreadable plate.
 # Off by default so the existing fine flow is unchanged; disagreements are logged.
 REQUIRE_STRICT_AGREEMENT = False
 CLIP_SECONDS_BEFORE = 2.0
@@ -203,36 +203,6 @@ def rfid_registry_candidates(db, partial: dict) -> list[dict]:
                   key=lambda c: (-c["score"], c["plate"]))
 
 
-def _route_partial(db, job_id, record, partial, video, run_dir, when, result) -> None:
-    """Partial plate: save the violation for verification, fine nobody."""
-    pattern = partial["partial_pattern"]
-    _log(job_id, f"plate PARTIAL: pattern={pattern!r} regex={partial['regex']} "
-                 f"(track {partial.get('track_id')}, frames {partial.get('frames_used')}, "
-                 f"confidence {partial.get('confidence')})")
-    for note in partial.get("corrections") or []:
-        _log(job_id, f"  correction: {note}")
-    candidates = registry_candidates(db, partial)
-    _log(job_id, f"candidates from vehicles table: {[c['plate'] for c in candidates] or 'none'}")
-    snapshot = _save_snapshot(job_id, Path(run_dir) / record.get("evidence_file", ""), "", video, record, when,
-                              label=f"PARTIAL PLATE: {pattern}")
-    for violation_type in record.get("violations") or ["UNKNOWN"]:
-        row = PendingVerification(
-            video_id=video.id, job_id=job_id, track_id=partial.get("track_id"), violation_type=violation_type,
-            partial_pattern=pattern, alternative_patterns=partial.get("alternative_patterns") or [],
-            pattern_regex=partial["regex"], is_complete=bool(partial.get("is_complete")),
-            confidence=partial.get("confidence"), pipeline_plate_status=record.get("plate_status"),
-            partial_json=partial, candidates=candidates, snapshot_image_path=snapshot,
-            evidence_time_s=record.get("evidence_time_s"), detected_at=when, status="pending",
-        )
-        db.add(row)
-        db.flush()
-        _log(job_id, f"pending_verification id={row.id} inserted: {pattern} {violation_type} "
-                     f"({len(candidates)} candidate(s)) - NOT fined")
-        result["pending_verification"] += 1
-        result["pending"].append({"pending_id": row.id, "pattern": pattern, "violation_type": violation_type,
-                                  "candidates": [c["plate"] for c in candidates], "snapshot": snapshot})
-
-
 def record_fines_for_run(summary: dict, run_dir: Path, video_name: str | None, job_id: str,
                          video_path: Path | None = None) -> dict:
     """Create fines / unmatched-violation rows for one processed video.
@@ -241,8 +211,7 @@ def record_fines_for_run(summary: dict, run_dir: Path, video_name: str | None, j
     commits. Never raises: errors are logged with a traceback and returned in
     the dict, and the detection result is unaffected.
     """
-    result = {"fines_created": 0, "unmatched": 0, "pending_verification": 0, "fines": [], "pending": [],
-              "error": None}
+    result = {"fines_created": 0, "unmatched": 0, "fines": [], "error": None}
     records = summary.get("vehicles") or []
     _log(job_id, f"video={video_name}: {len(records)} violating vehicle(s) from the pipeline")
     if not records:
@@ -260,8 +229,9 @@ def record_fines_for_run(summary: dict, run_dir: Path, video_name: str | None, j
             _log(job_id, f"plate={plate or 'UNREADABLE'} (status {record.get('plate_status')})")
             when = datetime.now(timezone.utc)
             # Only a CONFIRMED plate is fined automatically (existing flow below).
-            # Anything else is never fined: the strict partial pattern goes to
-            # pending_verification for RFID fusion / authority review.
+            # Anything else is never fined and is recorded as an unreadable plate.
+            # Partial plates are a Level 2 (crash) tool only, where RFID can
+            # resolve them; an uploaded routine video has no RFID.
             partial = record.get("partial_plate") or {}
             confirmed = record.get("plate_status") == "confirmed" and bool(plate)
             if confirmed and partial:
@@ -270,16 +240,18 @@ def record_fines_for_run(summary: dict, run_dir: Path, video_name: str | None, j
                 if not strict_ok:
                     _log(job_id, f"strict check: partial ANPR read {partial.get('partial_pattern')!r} "
                                  f"({len(partial.get('conflicts') or [])} frame conflict(s)) vs confirmed {plate} - "
-                                 + ("sent to pending_verification" if REQUIRE_STRICT_AGREEMENT
+                                 + ("recorded as unreadable" if REQUIRE_STRICT_AGREEMENT
                                     else "fined per existing flow (REQUIRE_STRICT_AGREEMENT off)"))
                     confirmed = confirmed and not REQUIRE_STRICT_AGREEMENT
             if not confirmed:
                 pattern = partial.get("partial_pattern")
                 if pattern and known_char_count(pattern) > 0:
-                    _route_partial(db, job_id, record, partial, video, run_dir, when, result)
-                    continue
-                plate = ""          # nothing was read: never use a low-confidence guess
-                _log(job_id, f"plate not confirmed and no character read (pattern {pattern!r})")
+                    # keep what was read as the raw plate; the violation stays unmatched
+                    record = {**record, "plate_raw": pattern}
+                    _log(job_id, f"plate PARTIAL {pattern!r}: recorded as unreadable - NOT fined")
+                else:
+                    _log(job_id, f"plate not confirmed and no character read (pattern {pattern!r})")
+                plate = ""          # never use a low-confidence guess
             vehicle = (db.query(Vehicle).filter(Vehicle.plate_number == plate, Vehicle.is_active.is_(True)).first()
                        if plate else None)
             snapshot = _save_snapshot(job_id, Path(run_dir) / record.get("evidence_file", ""), plate, video,
@@ -323,8 +295,7 @@ def record_fines_for_run(summary: dict, run_dir: Path, video_name: str | None, j
                                         "snapshot": snapshot, "has_clip": clip is not None})
         db.commit()
         result["fines_created"] = len(result["fines"])
-        _log(job_id, f"COMMITTED {result['fines_created']} fine(s), {result['pending_verification']} "
-                     f"pending verification, {result['unmatched']} unmatched")
+        _log(job_id, f"COMMITTED {result['fines_created']} fine(s), {result['unmatched']} unmatched")
     except Exception as error:
         db.rollback()
         result["error"] = f"{type(error).__name__}: {error}"

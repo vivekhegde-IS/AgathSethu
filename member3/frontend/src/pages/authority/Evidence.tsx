@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Card, Column, Select, Table } from '@components/ui'
+import { CrashTypeBadge } from '@components/authority/CrashTypeBadge'
 import { ResolveIncidentModal } from '@components/authority/ResolveIncidentModal'
 import { BoardIncident, RecordsBoard, errorMessage, fetchRecords, formatIst, formatIstDate } from '@api/portal'
 
@@ -60,10 +61,17 @@ export const EvidenceManager: React.FC = () => {
       header: 'VEHICLES INVOLVED',
       cell: (row) => {
         const plates = row.involved_plates_display.filter(Boolean) as string[]
-        return plates.length ? (
-          <span className="font-mono text-slate-900 text-xs">{plates.join(' · ')}</span>
-        ) : (
-          <span className="text-xs text-slate-500">Not identified</span>
+        return (
+          <div className="space-y-1">
+            {plates.length ? (
+              <span className="font-mono text-slate-900 text-xs">{plates.join(' · ')}</span>
+            ) : (
+              <span className="text-xs text-slate-500">Not identified</span>
+            )}
+            <div className="flex flex-wrap gap-1">
+              <CrashTypeBadge kind={row} />
+            </div>
+          </div>
         )
       },
     },

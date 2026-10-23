@@ -31,14 +31,13 @@ class _QuietJobPolling(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(_QuietJobPolling())
 
 
-def start_model_warm_up():
-    def warm():
-        try:
-            print(f"[ROUTINE] models warmed up: {routine_models.warm_up()}", flush=True)
-        except Exception as error:  # jobs will load lazily instead
-            print(f"[ROUTINE] model warm-up failed: {error}", flush=True)
-
-    threading.Thread(target=warm, name="routine-warm-up", daemon=True).start()
+def warm_models():
+    """Load + warm the routine-violation models (blocking; main.py runs it in
+    the single startup warm-up thread). Never raises."""
+    try:
+        print(f"[ROUTINE] models warmed up: {routine_models.warm_up()}", flush=True)
+    except Exception as error:  # jobs will load lazily instead
+        print(f"[ROUTINE] model warm-up failed: {error}", flush=True)
 
 
 # Authority only: uploading a video issues fines.

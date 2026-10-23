@@ -69,8 +69,6 @@ export function getAccessibleRoutes(role: UserRole): string[] {
       '/authority/live',
       '/authority/cameras',
       '/authority/incidents',
-      '/authority/vehicles',
-      '/authority/tracking',
       '/authority/evidence',
       '/authority/reports',
     ],
@@ -82,8 +80,6 @@ export function getAccessibleRoutes(role: UserRole): string[] {
       '/authority/live',
       '/authority/cameras',
       '/authority/incidents',
-      '/authority/vehicles',
-      '/authority/tracking',
       '/authority/evidence',
       '/authority/reports',
       // Plus admin-specific routes

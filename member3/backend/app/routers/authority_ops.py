@@ -4,7 +4,7 @@ AGHAT SETHU — Authority operations: dashboard summary, fines & revenue
 Authority only. Every number is computed from stored records at request time;
 months and days are Asia/Kolkata.
 
-  GET /api/authority/summary      home dashboard counts + latest crash frame
+  GET /api/authority/summary      home dashboard counts, helmet violations per day, latest crash frame
   GET /api/authority/fines        fines list (filter/paginate) + revenue views
 """
 
@@ -41,6 +41,25 @@ def _live_incidents(db: Session):
                     Incident.archived.is_(False)))
 
 
+# The dashboard chart: helmet violations per IST day, for the last CHART_DAYS days.
+CHART_VIOLATION = "NO HELMET"
+CHART_DAYS = 14
+
+
+def _helmet_by_day(db: Session) -> list[dict]:
+    """One row per IST day (oldest first, empty days included)."""
+    last = datetime.now(IST).date()
+    first = last - timedelta(days=CHART_DAYS - 1)
+    counts = {first + timedelta(days=i): 0 for i in range(CHART_DAYS)}
+    since = datetime.combine(first, time.min, tzinfo=IST)
+    for (detected_at,) in (db.query(Fine.detected_at)
+                           .filter(Fine.violation_type == CHART_VIOLATION, Fine.detected_at >= since)):
+        day = detected_at.astimezone(IST).date()
+        if day in counts:
+            counts[day] += 1
+    return [{"date": day.isoformat(), "count": count} for day, count in counts.items()]
+
+
 # Frame kinds that show the crash itself, best first.
 FRAME_KINDS = ("crash_frame", "hero_frame", "annotated_frame", "primary_frame")
 
@@ -52,8 +71,6 @@ def summary(db: Session = Depends(get_db)):
     unresolved = incidents.filter(Incident.status != "resolved")
     fines = db.query(Fine)
 
-    by_type = (db.query(Fine.violation_type, func.count(Fine.id))
-               .group_by(Fine.violation_type).order_by(func.count(Fine.id).desc()).all())
     pending = (db.query(func.count(Fine.id), func.coalesce(func.sum(Fine.fine_amount), 0.0))
                .filter(Fine.status != "Paid").one())
     collected = db.query(func.count(FinePayment.id), func.coalesce(func.sum(FinePayment.amount), 0.0)).one()
@@ -86,7 +103,8 @@ def summary(db: Session = Depends(get_db)):
         "violations": {
             "total": fines.count(),
             "today": fines.filter(Fine.detected_at >= today).count(),
-            "by_type": [{"violation_type": t, "count": c} for t, c in by_type],
+            "chart_type": CHART_VIOLATION,
+            "by_day": _helmet_by_day(db),
         },
         "fines": {
             "pending_count": pending[0], "pending_amount": float(pending[1]),

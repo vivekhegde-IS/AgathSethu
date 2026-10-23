@@ -29,15 +29,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ portal }) => {
     { section: 'LEVEL 1 ENFORCEMENT' },
     { name: 'Routine Violations', path: '/authority/level1', icon: '🛑' },
     { name: 'Fines & Revenue', path: '/authority/fines', icon: '💵' },
-    { name: 'Partial Plates', path: '/authority/partial-plates', icon: '🔎' },
 
     { section: 'LEVEL 2 CRASH INVESTIGATION' },
     { name: 'Crash Incident Radar', path: '/authority/incidents', icon: '🚨' },
     { name: 'Evidence Records', path: '/authority/evidence', icon: '🔒' },
-
-    { section: 'VEHICLE INTELLIGENCE' },
-    { name: 'Vehicle Registry & Search', path: '/authority/vehicles', icon: '🔍' },
-    { name: 'Multi-Junction Tracking', path: '/authority/tracking', icon: '🛰️' },
 
   ]
 

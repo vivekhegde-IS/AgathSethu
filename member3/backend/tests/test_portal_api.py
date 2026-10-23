@@ -303,6 +303,69 @@ def test_dashboard_summary_counts(client, world):
     body = client.get("/api/authority/summary", headers=_token(world["officer"])).json()
     assert body["crashes"]["total"] >= 2 and body["crashes"]["unresolved"] >= 1
     assert body["violations"]["total"] >= 1
-    assert any(t["violation_type"] == "NO HELMET" for t in body["violations"]["by_type"])
+    # helmet violations per IST day: 14 days, oldest first, today last
+    by_day = body["violations"]["by_day"]
+    assert body["violations"]["chart_type"] == "NO HELMET"
+    assert len(by_day) == 14 and by_day == sorted(by_day, key=lambda d: d["date"])
+    assert by_day[-1]["count"] >= 1
     # the junction overview endpoint was removed
     assert client.get("/api/authority/junctions", headers=_token(world["officer"])).status_code == 404
+
+
+# ── multi-junction tracking: one junction of the route ──────────────────────────
+def test_junction_page_shows_fled_vehicle_and_owner(client, world):
+    from app.models.models import IncidentVehicle, RfidSighting
+
+    epc = f"E2TEST{TAG[:8]}"
+    db = SessionLocal()
+    db.add_all([
+        IncidentVehicle(incident_id=world["other_id"], plate_norm=world["plate_a"], epc=epc, role="involved"),
+        IncidentVehicle(incident_id=world["other_id"], plate_norm=world["plate_a"], epc=epc, role="fled"),
+        RfidSighting(incident_id=world["other_id"], epc=epc, plate_norm=world["plate_a"], junction_id="J01",
+                     first_seen_ts=120.0, last_seen_ts=124.0, report_count=6),
+    ])
+    db.commit()
+    db.close()
+    officer = _token(world["officer"])
+    base = f"/api/incidents/{world['other_id']}/junctions"
+
+    body = client.get(f"{base}/J01", headers=officer).json()
+    assert body["junction"] == {"id": "J01", "label": "Junction 1", "is_crash": False}
+    [vehicle] = body["vehicles"]
+    assert vehicle["plate_norm"] == world["plate_a"] and vehicle["fled"] is True
+    assert vehicle["owner"]["name"] == "Alice"                 # the registered owner
+    assert vehicle["sightings"][0]["seen_at"]                  # real (wall-clock) time of the read
+    # the crash junction: the vehicle was there, with the crash frames
+    crash = client.get(f"{base}/J03", headers=officer).json()
+    assert crash["junction"]["is_crash"] is True and len(crash["vehicles"]) == 1
+    # a junction it never reached lists nobody; an unknown junction is a 404
+    assert client.get(f"{base}/J02", headers=officer).json()["vehicles"] == []
+    assert client.get(f"{base}/J09", headers=officer).status_code == 404
+    # owner details are authority only
+    assert client.get(f"{base}/J01", headers=_token(world["alice"])).status_code == 403
+
+
+def test_crash_type_and_hit_and_run(client, world):
+    """NETRA v1.8 statuses -> two-car / single-vehicle, and hit-and-run."""
+    from app.models.models import IncidentAlert, IncidentVehicle
+
+    officer = _token(world["officer"])
+    # other_id (set up above): one crashed car that later left, no alerts
+    single = client.get(f"/api/incidents/{world['other_id']}", headers=officer).json()["incident"]
+    assert single["crash_type"] == "single_vehicle"
+    assert single["hit_and_run"] is False and single["left_scene_plates"] == [world["plate_a"]]
+
+    # incident_id: a two-car pair alert, then one of the cars leaves
+    db = SessionLocal()
+    for alert_id, status in (("T-1", "COLLISION_EVENT_CONFIRMED_IMU_GPS"),
+                             ("T-2", "COLLISION_EVENT_CONFIRMED_PARTNER_ASSOCIATION")):
+        db.add(IncidentAlert(incident_id=world["incident_id"], alert_id=f"{alert_id}-{TAG}", source="imu_gps",
+                             status=status, timestamp_sim=50.0))
+    db.commit()
+    pair = client.get(f"/api/incidents/{world['incident_id']}", headers=officer).json()["incident"]
+    assert pair["crash_type"] == "two_car" and pair["hit_and_run"] is False
+    db.add(IncidentVehicle(incident_id=world["incident_id"], plate_norm=world["plate_b"], role="fled"))
+    db.commit()
+    db.close()
+    pair = client.get(f"/api/incidents/{world['incident_id']}", headers=officer).json()["incident"]
+    assert pair["hit_and_run"] is True and pair["left_scene_plates"] == [world["plate_b"]]

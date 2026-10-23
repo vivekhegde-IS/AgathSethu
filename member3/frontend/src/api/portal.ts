@@ -46,6 +46,9 @@ const IST_FORMAT = new Intl.DateTimeFormat('en-IN', {
   timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
   hour: '2-digit', minute: '2-digit', hour12: true,
 })
+const IST_TIME = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+})
 const IST_DATE = new Intl.DateTimeFormat('en-IN', {
   timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
 })
@@ -53,6 +56,11 @@ const IST_DATE = new Intl.DateTimeFormat('en-IN', {
 /** Wall-clock date and time in IST, e.g. "18 Oct 2026, 11:42 pm". */
 export function formatIst(iso: string | null | undefined): string {
   return iso ? IST_FORMAT.format(new Date(iso)) : '—'
+}
+
+/** Wall-clock time of day in IST with seconds, e.g. "11:42:07 pm". */
+export function formatIstTime(iso: string | null | undefined): string {
+  return iso ? IST_TIME.format(new Date(iso)) : '—'
 }
 
 export function formatIstDate(iso: string | null | undefined): string {
@@ -82,6 +90,11 @@ export interface BoardIncident {
   live_feed: boolean
   sighting_count: number
   vision_confirmed: number
+  /** NETRA v1.8 crash type (see CrashTypeBadge) */
+  crash_type?: string
+  crashed_vehicle_count?: number
+  hit_and_run?: boolean
+  left_scene_plates?: string[]
 }
 
 export interface RadarBoard {
@@ -124,7 +137,14 @@ export async function resolveIncident(id: string, password: string, note: string
 // ── authority: dashboard, fines, cameras ──────────────────────────────
 export interface AuthoritySummary {
   crashes: { total: number; unresolved: number; today: number; resolved_today: number }
-  violations: { total: number; today: number; by_type: { violation_type: string; count: number }[] }
+  violations: {
+    total: number
+    today: number
+    /** the violation type charted per day (NO HELMET) */
+    chart_type: string
+    /** IST days, oldest first, empty days included */
+    by_day: { date: string; count: number }[]
+  }
   fines: { pending_count: number; pending_amount: number; paid_count: number; collected_amount: number }
   latest_crash_frame: {
     incident_id: string; reference: string; location: string; url: string; captured_at: string | null; kind: string

@@ -29,6 +29,10 @@ export interface IncidentSummary {
   vehicle_count: number
   sighting_count: number
   vision_confirmed: number
+  crash_type?: string
+  crashed_vehicle_count?: number
+  hit_and_run?: boolean
+  left_scene_plates?: string[]
 }
 
 export interface EvidenceFileRef {
@@ -39,6 +43,10 @@ export interface EvidenceFileRef {
   width: number | null
   height: number | null
   score: number | null
+  frame_ts?: number | null
+  junction_id?: string | null
+  /** wall clock (ISO) when the image was saved */
+  created_at?: string | null
 }
 
 export interface VisionMatchView {
@@ -65,6 +73,8 @@ export interface SightingView {
   reader_id: string | null
   first_seen_ts: number
   last_seen_ts: number
+  /** wall clock (ISO) when the tag was first read at this junction */
+  seen_at?: string | null
   report_count: number
   tag_seen_count: number
   peak_rssi_dbm: number | null
@@ -90,6 +100,8 @@ export interface IncidentDetail {
     registry: string
     /** Member 1 reported this vehicle escaping the crash */
     fled?: boolean
+    /** citizen who registered the plate (null when nobody has) */
+    owner_name?: string | null
   }[]
   crash_zone_rfid: {
     epc: string
@@ -109,6 +121,25 @@ export interface IncidentDetail {
   best_evidence_by_junction?: JunctionEvidence[]
   /** The vehicle(s) that fled the crash, with the overall plate verdict. */
   fleeing_vehicles?: FleeingVehicle[]
+  /** World (x, y) of every junction, for the tracking map. */
+  junction_positions?: Record<string, JunctionPosition>
+}
+
+export interface JunctionPosition {
+  x: number
+  y: number
+  label: string
+}
+
+/** Strict partial plate of the suspect at a junction where the camera did not
+ *  confirm the RFID plate. Unread characters: _ one, * 0-2, + 0-1. */
+export interface PartialPlate {
+  pattern: string
+  alternative_patterns: string[]
+  is_complete: boolean
+  confidence: number | null
+  frames_used: number | null
+  candidates: { plate: string; score: number; epc?: string; source: string }[]
 }
 
 export interface FleeingVehicle {
@@ -171,6 +202,7 @@ export interface JunctionEvidence {
     candidate_reads: number
     candidates: CandidateRead[]
   }
+  partial_plate?: PartialPlate | null
 }
 
 export async function listIncidents(limit = 50): Promise<IncidentSummary[]> {
@@ -182,6 +214,49 @@ export async function listIncidents(limit = 50): Promise<IncidentSummary[]> {
 
 export async function getIncident(incidentId: string): Promise<IncidentDetail> {
   const { data } = await apiClient.get<IncidentDetail>(`/incidents/${incidentId}`)
+  return data
+}
+
+/** Citizen who registered the plate, with the vehicle details on file. */
+export interface RegisteredOwner {
+  name: string
+  phone: string | null
+  email: string | null
+  vehicle: {
+    make: string | null
+    model: string | null
+    year: number | null
+    color: string | null
+    vehicle_type: string | null
+    fastag_id: string | null
+  }
+}
+
+export interface JunctionVehicle {
+  plate_norm: string
+  plate_display: string | null
+  state_name: string | null
+  epc: string | null
+  fled: boolean
+  basis: string | null
+  sightings: SightingView[]
+  /** the ANPR evidence card of this vehicle at this junction */
+  evidence: JunctionEvidence | null
+  /** the vehicle cropped from its best frame here (protected URL) */
+  vehicle_image: string | null
+  owner: RegisteredOwner | null
+}
+
+export interface JunctionDetail {
+  incident: IncidentSummary & Record<string, unknown>
+  junction: { id: string; label: string; is_crash: boolean }
+  crash_frames: EvidenceFileRef[]
+  vehicles: JunctionVehicle[]
+}
+
+/** One junction of the crash route: the fled vehicle's evidence there and its owner. */
+export async function getJunction(incidentId: string, junctionId: string): Promise<JunctionDetail> {
+  const { data } = await apiClient.get<JunctionDetail>(`/incidents/${incidentId}/junctions/${junctionId}`)
   return data
 }
 

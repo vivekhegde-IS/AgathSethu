@@ -39,12 +39,10 @@ import { AuthorityDashboard } from '@pages/authority/Dashboard'
 import { Level1Dashboard } from '@pages/authority/Level1'
 import { AuthorityViolationDetail } from '@pages/authority/ViolationDetail'
 import { FineManagement } from '@pages/authority/Fines'
-import { PartialPlatesPage } from '@pages/authority/PartialPlates'
 import { LiveMonitoring } from '@pages/authority/Live'
 import { IncidentDashboard } from '@pages/authority/Incidents'
-import { VehicleSearch } from '@pages/authority/Vehicles'
-import { VehicleProfilePage } from '@pages/authority/VehicleProfile'
 import { TrackingDashboard } from '@pages/authority/Tracking'
+import { JunctionDetailPage } from '@pages/authority/JunctionDetail'
 import { EvidenceManager } from '@pages/authority/Evidence'
 import { IncidentEvidencePage } from '@pages/authority/IncidentEvidence'
 
@@ -129,14 +127,13 @@ export default function App() {
             <Route path="level1" element={<Level1Dashboard />} />
             <Route path="violations/:violationId" element={<AuthorityViolationDetail />} />
             <Route path="fines" element={<FineManagement />} />
-            <Route path="partial-plates" element={<PartialPlatesPage />} />
             <Route path="live" element={<LiveMonitoring />} />
             <Route path="incidents" element={<IncidentDashboard />} />
-            <Route path="vehicles" element={<VehicleSearch />} />
-            <Route path="vehicles/:vehicleId" element={<VehicleProfilePage />} />
-            <Route path="tracking" element={<TrackingDashboard />} />
+            <Route path="tracking" element={<Navigate to="/authority/evidence" replace />} />
             <Route path="evidence" element={<EvidenceManager />} />
             <Route path="evidence/:evidenceId" element={<IncidentEvidencePage />} />
+            <Route path="evidence/:evidenceId/tracking" element={<TrackingDashboard />} />
+            <Route path="evidence/:evidenceId/tracking/:junctionId" element={<JunctionDetailPage />} />
             <Route path="incident-evidence" element={<LegacyIncidentRedirect />} />
             <Route path="incident-evidence/:incidentId" element={<LegacyIncidentRedirect />} />
           </Route>

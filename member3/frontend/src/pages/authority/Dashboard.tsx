@@ -136,7 +136,8 @@ export const AuthorityDashboard: React.FC = () => {
         </Card>
 
         <Card
-          title="Violations by type"
+          title="Helmet violations per day"
+          subtitle={`Last ${violations.by_day.length} days (IST)`}
           className="lg:col-span-1"
           actions={
             <Link to="/authority/fines">
@@ -146,28 +147,59 @@ export const AuthorityDashboard: React.FC = () => {
             </Link>
           }
         >
-          {violations.by_type.length === 0 ? (
-            <p className="text-sm text-slate-600 py-6 text-center">No violations recorded.</p>
-          ) : (
-            <ul className="space-y-3">
-              {violations.by_type.map((row) => (
-                <li key={row.violation_type} className="text-xs font-mono">
-                  <div className="flex justify-between text-slate-700 pb-1">
-                    <span>{row.violation_type}</span>
-                    <span className="font-bold text-slate-900">{row.count}</span>
-                  </div>
-                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden" aria-hidden="true">
-                    <div
-                      className="bg-cyan-500 h-full"
-                      style={{ width: `${(row.count / Math.max(1, violations.total)) * 100}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ViolationsByDay days={violations.by_day} />
         </Card>
       </div>
+    </div>
+  )
+}
+
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "2026-10-23" -> "23 Oct" (the date is already an IST day; no timezone shift). */
+const dayLabel = (date: string) => {
+  const [, month, day] = date.split('-').map(Number)
+  return `${day} ${MONTHS[month - 1]}`
+}
+
+/** One bar per IST day; the count sits above each bar. */
+const ViolationsByDay: React.FC<{ days: AuthoritySummary['violations']['by_day'] }> = ({ days }) => {
+  const total = days.reduce((sum, d) => sum + d.count, 0)
+  if (total === 0) {
+    return <p className="text-sm text-slate-600 py-6 text-center">No helmet violations in this period.</p>
+  }
+  const peak = Math.max(...days.map((d) => d.count))
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-mono text-slate-600">
+        <span className="font-bold text-slate-900">{total}</span> helmet violation{total === 1 ? '' : 's'}
+      </p>
+      <div className="flex items-end gap-1 h-36" role="img" aria-label="Helmet violations per day">
+        {days.map((d) => (
+          <div
+            key={d.date}
+            className="flex-1 min-w-0 h-full flex flex-col justify-end items-center"
+            title={`${dayLabel(d.date)}: ${d.count}`}
+          >
+            {d.count > 0 && <span className="text-[10px] font-mono text-slate-900">{d.count}</span>}
+            <div
+              className={`w-full rounded-t ${d.count > 0 ? 'bg-cyan-500' : 'bg-slate-200'}`}
+              style={{ height: d.count > 0 ? `${(d.count / peak) * 80}%` : '2px' }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-1 text-[9px] font-mono text-slate-500">
+        {days.map((d, i) => (
+          <span key={d.date} className="flex-1 min-w-0 text-center truncate">
+            {i % 2 === days.length % 2 ? '' : dayLabel(d.date).split(' ')[0]}
+          </span>
+        ))}
+      </div>
+      <p className="text-[10px] font-mono text-slate-500 text-center">
+        {dayLabel(days[0].date)} – {dayLabel(days[days.length - 1].date)}
+      </p>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Card, Spinner } from '@components/ui'
+import { CrashTypeBadge } from '@components/authority/CrashTypeBadge'
 import { ResolveIncidentModal } from '@components/authority/ResolveIncidentModal'
 import { BoardIncident, RadarBoard, errorMessage, fetchRadar, formatIst } from '@api/portal'
 
@@ -84,6 +85,7 @@ const IncidentRow: React.FC<{ incident: BoardIncident; onResolve?: () => void }>
           <Badge variant={incident.resolved ? 'success' : 'danger'} size="sm">
             {incident.resolved ? 'Resolved' : 'Unresolved'}
           </Badge>
+          <CrashTypeBadge kind={incident} />
           <span className="text-xs text-slate-700">{incident.location}</span>
         </div>
         <p className="text-sm text-slate-600">

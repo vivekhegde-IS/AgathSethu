@@ -1,0 +1,8 @@
+# AGHAT SETHU — dependencies for the hosted (Render) backend.
+# The base API plus what the routers import at startup. OpenVINO / Ultralytics
+# and the model weights are left out: they do not fit a free instance, and the
+# model warm-up only logs a failure, so the AI video features are unavailable
+# while everything else works.
+-r requirements.txt
+numpy<2.3
+opencv-python-headless==4.10.0.84

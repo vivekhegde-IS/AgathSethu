@@ -1,0 +1,42 @@
+# Render Blueprint — AGHAT SETHU backend (FastAPI) + PostgreSQL.
+# Render dashboard → New → Blueprint → pick this repository.
+# The frontend is hosted on Vercel (member3/frontend, see member3/DEPLOY.md).
+services:
+  - type: web
+    name: aghat-sethu-api
+    runtime: python
+    plan: free
+    rootDir: member3/backend
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: bash render_start.sh
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aghat-sethu-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      # The Vercel site's URL, e.g. https://aghat-sethu.vercel.app (comma-separated for several)
+      - key: CORS_ORIGINS
+        sync: false
+      # No MediaMTX server in the cloud
+      - key: WEBRTC_ENABLED
+        value: "false"
+      # Seed demo users/data into the empty database on first start
+      - key: SEED_DEMO_DATA
+        value: "1"
+      - key: SEED_AUTHORITY_PASSWORD
+        sync: false
+      - key: SEED_CITIZEN_PASSWORD
+        sync: false
+
+databases:
+  - name: aghat-sethu-db
+    plan: free
+    databaseName: aghat_sethu
+    user: aghat

@@ -16,6 +16,7 @@ Prerequisites:
     - alembic upgrade head already run
 """
 
+import os
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -48,12 +49,13 @@ from app.models.models import (
 )
 
 # ── Seed Credentials (DEVELOPMENT ONLY) ─────────────────────────────────────────
-# ⚠️  Change these before any real deployment ⚠️
+# ⚠️  On a public deployment set SEED_AUTHORITY_PASSWORD / SEED_CITIZEN_PASSWORD
+# in the environment: the defaults below are in the public repository. ⚠️
 SEED_AUTHORITY_EMAIL = "inspector.vikram@trafficops.blr.gov.in"
-SEED_AUTHORITY_PASSWORD = "Authority@Dev2026"   # dev only
+SEED_AUTHORITY_PASSWORD = os.environ.get("SEED_AUTHORITY_PASSWORD", "Authority@Dev2026")
 
 SEED_CITIZEN_EMAIL = "aarav.sharma@example.com"
-SEED_CITIZEN_PASSWORD = "Citizen@Dev2026"       # dev only
+SEED_CITIZEN_PASSWORD = os.environ.get("SEED_CITIZEN_PASSWORD", "Citizen@Dev2026")
 
 
 def utcnow():

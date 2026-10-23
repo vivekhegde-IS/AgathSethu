@@ -4,6 +4,7 @@ Loads all settings from environment variables / .env file.
 """
 
 from pathlib import Path
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -13,6 +14,16 @@ ENV_PATH = BACKEND_DIR / ".env"
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+psycopg://postgres:password@localhost:5432/Aghat_Sethu"
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _use_psycopg3(cls, url: str) -> str:
+        # Hosts (Render, Neon) hand out postgres:// or postgresql:// URLs;
+        # SQLAlchemy would pick psycopg2 for those, which is not installed.
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix):]
+        return url
 
     # JWT
     JWT_SECRET: str = "CHANGE_ME_GENERATE_A_REAL_SECRET"

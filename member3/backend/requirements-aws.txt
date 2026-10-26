@@ -1,0 +1,11 @@
+# AGHAT SETHU — dependencies for the AWS EC2 backend (full AI stack, CPU).
+# Same versions as the local .venv. PyTorch is installed first from the CPU
+# wheel index by deploy/aws/setup_server.sh (the default wheels pull ~2 GB of
+# CUDA libraries an EC2 t3 instance cannot use).
+-r requirements.txt
+numpy==2.2.6
+opencv-python==4.14.0.94
+ultralytics==8.4.118
+openvino==2026.4.0
+onnxruntime==1.30.0
+rapidocr-onnxruntime==1.4.4

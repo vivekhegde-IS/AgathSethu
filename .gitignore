@@ -48,7 +48,6 @@ member3/frontend/dist/
 member3/frontend/.vite/
 dist/
 .vite/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 

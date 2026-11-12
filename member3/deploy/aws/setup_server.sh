@@ -9,8 +9,10 @@
 #   sudo SEED_AUTHORITY_PASSWORD='...' SEED_CITIZEN_PASSWORD='...' \
 #        bash setup_server.sh
 #
-# Optional: DOMAIN (default <public-ip-with-dashes>.sslip.io),
-#           CORS_ORIGINS (default https://$DOMAIN; add other sites comma-separated).
+# Optional: DOMAIN, the site's main name, e.g. aghatsethu.duckdns.org (default:
+#           the one saved by the last run, else <public-ip-with-dashes>.sslip.io;
+#           the sslip.io name is always served too),
+#           CORS_ORIGINS (default both names; add other sites comma-separated).
 # Model weights are not in git: copy aghat-models.tar.gz to /tmp first
 # (see README.md); it is unpacked into member3/ when present.
 set -euo pipefail
@@ -28,6 +30,7 @@ WEB_ROOT=/var/www/aghat
 MEDIAMTX_VERSION=v1.21.1
 MEDIAMTX_SHA256=653abc672a3e693f8d3b2717752492fdcfb8072291ec108d03d3dd857411b0ee
 MEDIAMTX_ENV=/etc/aghat/mediamtx.env
+SITE_ENV=/etc/aghat/site.env
 CREDENTIALS=/root/aghat-credentials.txt
 
 step() { echo; echo "== $*"; }
@@ -42,11 +45,19 @@ env_set() {
 
 [ "$(id -u)" = 0 ] || fail "run with sudo"
 cd /tmp
-# The Elastic IP: browsers reach MediaMTX's WebRTC media on it, and it names
-# the HTTPS host (<ip-with-dashes>.sslip.io).
+# The Elastic IP: browsers reach MediaMTX's WebRTC media on it, and it gives
+# the always-served HTTPS name <ip-with-dashes>.sslip.io.
 PUBLIC_IP=$(curl -fsS https://checkip.amazonaws.com)
-DOMAIN="${DOMAIN:-${PUBLIC_IP//./-}.sslip.io}"
-CORS_ORIGINS="${CORS_ORIGINS:-https://$DOMAIN}"
+IP_HOST="${PUBLIC_IP//./-}.sslip.io"
+# DOMAIN is the main name (website build, CARLA PC). It is saved, so a re-run
+# without DOMAIN keeps a custom name instead of falling back to sslip.io.
+mkdir -p /etc/aghat
+DOMAIN="${DOMAIN:-$(env_get "$SITE_ENV" DOMAIN)}"
+DOMAIN="${DOMAIN:-$IP_HOST}"
+echo "DOMAIN=$DOMAIN" > "$SITE_ENV"
+SITE_HOSTS="$DOMAIN"
+[ "$DOMAIN" = "$IP_HOST" ] || SITE_HOSTS="$DOMAIN, $IP_HOST"
+CORS_ORIGINS="${CORS_ORIGINS:-https://${SITE_HOSTS//, /,https://}}"
 
 # 1) Swap: headroom for PyTorch + three detectors on a 4 GB instance ---------------
 step "Swap (4 GB)"
@@ -272,9 +283,9 @@ rsync -a --delete "$FRONTEND/dist/" "$WEB_ROOT/"
 chmod -R a+rX "$WEB_ROOT"
 
 # 10) HTTPS ---------------------------------------------------------------------------
-step "Caddy (HTTPS for $DOMAIN)"
+step "Caddy (HTTPS for $SITE_HOSTS)"
 cat > /etc/caddy/Caddyfile <<CADDY
-$DOMAIN {
+$SITE_HOSTS {
     encode gzip
 
     # API and WebSockets -> FastAPI

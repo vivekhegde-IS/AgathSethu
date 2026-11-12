@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Sets up (or updates) the AGHAT SETHU backend on an Ubuntu 24.04 EC2 instance:
-# PostgreSQL, the FastAPI backend with the full AI stack (CPU), a systemd
-# service and Caddy for HTTPS. Safe to re-run: a re-run pulls the latest code,
-# reinstalls dependencies, migrates the database and restarts the backend.
+# PostgreSQL, the FastAPI backend with the full AI stack (CPU), MediaMTX for
+# the live H.264/WebRTC camera streams, systemd services and Caddy for HTTPS.
+# Safe to re-run: a re-run pulls the latest code, reinstalls dependencies,
+# migrates the database and restarts the services; secrets are kept.
 #
 #   sudo SEED_AUTHORITY_PASSWORD='...' SEED_CITIZEN_PASSWORD='...' \
 #        bash setup_server.sh
@@ -22,13 +23,27 @@ DATA_DIR=/var/lib/aghat-data
 ENV_FILE=$BACKEND/.env
 MODELS_TARBALL=/tmp/aghat-models.tar.gz
 CORS_ORIGINS="${CORS_ORIGINS:-https://agath-sethu.vercel.app}"
+MEDIAMTX_VERSION=v1.21.1
+MEDIAMTX_SHA256=653abc672a3e693f8d3b2717752492fdcfb8072291ec108d03d3dd857411b0ee
+MEDIAMTX_ENV=/etc/aghat/mediamtx.env
+CREDENTIALS=/root/aghat-credentials.txt
 
 step() { echo; echo "== $*"; }
 fail() { echo "SETUP FAILED: $*" >&2; exit 1; }
 as_app() { sudo -u "$APP_USER" -H "$@"; }
+# Value of KEY in an env file ("" when absent).
+env_get() { grep -m1 "^$2=" "$1" 2>/dev/null | cut -d= -f2- || true; }
+# Set KEY=VALUE in an env file, replacing an existing line.
+env_set() {
+    if grep -q "^$2=" "$1"; then sed -i "s|^$2=.*|$2=$3|" "$1"; else echo "$2=$3" >> "$1"; fi
+}
 
 [ "$(id -u)" = 0 ] || fail "run with sudo"
 cd /tmp
+# The Elastic IP: browsers reach MediaMTX's WebRTC media on it, and it names
+# the HTTPS host (<ip-with-dashes>.sslip.io).
+PUBLIC_IP=$(curl -fsS https://checkip.amazonaws.com)
+DOMAIN="${DOMAIN:-${PUBLIC_IP//./-}.sslip.io}"
 
 # 1) Swap: headroom for PyTorch + three detectors on a 4 GB instance ---------------
 step "Swap (4 GB)"
@@ -121,16 +136,24 @@ DATABASE_URL=postgresql+psycopg://aghat:$DB_PASS@127.0.0.1:5432/aghat_sethu
 JWT_SECRET=$(openssl rand -hex 64)
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
-CORS_ORIGINS=$CORS_ORIGINS
 APP_ENV=production
 DATA_DIR=$DATA_DIR
-WEBRTC_ENABLED=false
 ENV
     echo "wrote $ENV_FILE"
 else
-    sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=$CORS_ORIGINS|" "$ENV_FILE"
-    echo "kept $ENV_FILE (CORS_ORIGINS=$CORS_ORIGINS)"
+    echo "kept $ENV_FILE"
 fi
+# Secrets are generated once and kept across re-runs.
+READ_PASS=$(env_get "$ENV_FILE" MEDIAMTX_READ_PASS)
+[ -n "$READ_PASS" ] || READ_PASS=$(openssl rand -hex 16)
+INGEST_TOKEN=$(env_get "$ENV_FILE" CARLA_INGEST_TOKEN)
+[ -n "$INGEST_TOKEN" ] || INGEST_TOKEN=$(openssl rand -hex 24)
+env_set "$ENV_FILE" CORS_ORIGINS "$CORS_ORIGINS"
+env_set "$ENV_FILE" WEBRTC_ENABLED true
+env_set "$ENV_FILE" MEDIAMTX_WHEP_URL http://127.0.0.1:8889
+env_set "$ENV_FILE" MEDIAMTX_READ_USER website
+env_set "$ENV_FILE" MEDIAMTX_READ_PASS "$READ_PASS"
+env_set "$ENV_FILE" CARLA_INGEST_TOKEN "$INGEST_TOKEN"
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
@@ -148,7 +171,52 @@ else
 fi
 cd /tmp
 
-# 7) Backend service ------------------------------------------------------------------
+# 7) MediaMTX: RTSP ingest from the CARLA PC, WebRTC to browsers ----------------------
+step "MediaMTX $MEDIAMTX_VERSION (live camera streams)"
+if ! /usr/local/bin/mediamtx --version 2>/dev/null | grep -q "$MEDIAMTX_VERSION"; then
+    tarball="mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz"
+    curl -fsSLo "/tmp/$tarball" \
+        "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX_VERSION/$tarball"
+    echo "$MEDIAMTX_SHA256  /tmp/$tarball" | sha256sum -c -
+    tar -xzf "/tmp/$tarball" -C /usr/local/bin mediamtx
+fi
+id mediamtx >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin mediamtx
+mkdir -p /etc/aghat
+[ -f "$MEDIAMTX_ENV" ] || touch "$MEDIAMTX_ENV"
+PUBLISH_PASS=$(env_get "$MEDIAMTX_ENV" MTX_AUTHINTERNALUSERS_0_PASS)
+[ -n "$PUBLISH_PASS" ] || PUBLISH_PASS=$(openssl rand -hex 16)
+# mediamtx.yml from the repo; secrets and this host's address come from the
+# environment (MediaMTX's MTX_* overrides).
+env_set "$MEDIAMTX_ENV" MTX_AUTHINTERNALUSERS_0_PASS "$PUBLISH_PASS"
+env_set "$MEDIAMTX_ENV" MTX_AUTHINTERNALUSERS_1_PASS "$READ_PASS"
+# Behind EC2's 1:1 NAT the interfaces only carry the private address: announce
+# the Elastic IP, and accept ICE over TCP 8189 for networks that block UDP.
+env_set "$MEDIAMTX_ENV" MTX_WEBRTCADDITIONALHOSTS "$PUBLIC_IP"
+env_set "$MEDIAMTX_ENV" MTX_WEBRTCLOCALTCPADDRESS ":8189"
+chmod 600 "$MEDIAMTX_ENV"
+# The mediamtx user cannot read the app user's home: keep its config in /etc.
+install -m 644 "$APP_DIR/member3/media-server/mediamtx.yml" /etc/aghat/mediamtx.yml
+cat > /etc/systemd/system/aghat-mediamtx.service <<UNIT
+[Unit]
+Description=AGHAT SETHU MediaMTX (CARLA camera streams)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mediamtx
+EnvironmentFile=$MEDIAMTX_ENV
+ExecStart=/usr/local/bin/mediamtx /etc/aghat/mediamtx.yml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable aghat-mediamtx
+systemctl restart aghat-mediamtx
+
+# 8) Backend service ------------------------------------------------------------------
 step "systemd service aghat-backend"
 cat > /etc/systemd/system/aghat-backend.service <<UNIT
 [Unit]
@@ -171,11 +239,7 @@ systemctl daemon-reload
 systemctl enable aghat-backend
 systemctl restart aghat-backend
 
-# 8) HTTPS ----------------------------------------------------------------------------
-if [ -z "${DOMAIN:-}" ]; then
-    PUBLIC_IP=$(curl -fsS https://checkip.amazonaws.com)
-    DOMAIN="${PUBLIC_IP//./-}.sslip.io"
-fi
+# 9) HTTPS ----------------------------------------------------------------------------
 step "Caddy (HTTPS for $DOMAIN)"
 cat > /etc/caddy/Caddyfile <<CADDY
 $DOMAIN {
@@ -186,16 +250,33 @@ CADDY
 systemctl enable caddy
 systemctl reload caddy || systemctl restart caddy
 
-# 9) Check ----------------------------------------------------------------------------
+# 10) Check ---------------------------------------------------------------------------
 step "Waiting for the backend"
 for _ in $(seq 1 60); do
     curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1 && break
     sleep 2
 done
 curl -fsS http://127.0.0.1:8000/api/health || fail "backend not answering: journalctl -u aghat-backend -n 100"
+systemctl is-active --quiet aghat-mediamtx || fail "MediaMTX not running: journalctl -u aghat-mediamtx -n 100"
+
+cat > "$CREDENTIALS" <<CREDS
+AGHAT SETHU on $DOMAIN ($PUBLIC_IP)
+
+Backend:  https://$DOMAIN/api/health
+
+Vercel environment variables:
+  VITE_API_BASE_URL=https://$DOMAIN/api
+  VITE_WS_URL=wss://$DOMAIN/ws
+  VITE_LIVE_CAMERA_WS_URL=wss://$DOMAIN/ws/live-cameras
+  VITE_WEBRTC_ENABLED=true
+
+CARLA PC (PowerShell, before python full_run.py):
+  \$env:STREAM_RTSP_BASE = "rtsp://$PUBLIC_IP:8554"
+  \$env:STREAM_PUBLISH_USER = "carla"
+  \$env:STREAM_PUBLISH_PASS = "$PUBLISH_PASS"
+  \$env:CARLA_EVIDENCE_WS = "wss://$DOMAIN/ws/carla/cameras?token=$INGEST_TOKEN"
+CREDS
+chmod 600 "$CREDENTIALS"
 echo
-echo
-echo "Backend is up:  https://$DOMAIN/api/health"
-echo "Vercel env:     VITE_API_BASE_URL=https://$DOMAIN/api"
-echo "                VITE_WS_URL=wss://$DOMAIN/ws"
-echo "                VITE_LIVE_CAMERA_WS_URL=wss://$DOMAIN/ws/live-cameras"
+cat "$CREDENTIALS"
+echo "(saved in $CREDENTIALS)"

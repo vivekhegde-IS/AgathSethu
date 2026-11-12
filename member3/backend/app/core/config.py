@@ -35,6 +35,16 @@ class Settings(BaseSettings):
 
     # App
     APP_ENV: str = "development"
+    # Public address of the website, used for links in emails
+    SITE_URL: str = "http://localhost:5173"
+
+    # Welcome email on a user's first login (SMTP, e.g. Gmail with an App
+    # Password). Empty SMTP_PASSWORD = emails are not sent.
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    MAIL_FROM_NAME: str = "AGHAT SETHU"
 
     # Where the backend keeps its files (evidence photos, fine snapshots and
     # clips, routine-violation outputs, live-ANPR images, stream recordings).

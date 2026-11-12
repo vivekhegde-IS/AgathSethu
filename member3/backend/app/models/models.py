@@ -52,6 +52,8 @@ class User(Base):
         default="active",
     )
     jurisdiction = Column(String(255), nullable=True)
+    # Set when the welcome email for the first login was sent (see welcome_email.py)
+    welcome_email_sent_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

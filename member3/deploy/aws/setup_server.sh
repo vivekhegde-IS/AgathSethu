@@ -176,6 +176,28 @@ env_set "$ENV_FILE" MEDIAMTX_WHEP_URL http://127.0.0.1:8889
 env_set "$ENV_FILE" MEDIAMTX_READ_USER website
 env_set "$ENV_FILE" MEDIAMTX_READ_PASS "$READ_PASS"
 env_set "$ENV_FILE" CARLA_INGEST_TOKEN "$INGEST_TOKEN"
+# Welcome emails: links point at the main name; the sender account is given
+# once as SMTP_USER=... and kept. Its password is set separately with
+# aghat-set-smtp-password (below), so it is never on a command line.
+env_set "$ENV_FILE" SITE_URL "https://$DOMAIN"
+[ -z "${SMTP_USER:-}" ] || env_set "$ENV_FILE" SMTP_USER "$SMTP_USER"
+cat > /usr/local/sbin/aghat-set-smtp-password <<HELPER
+#!/usr/bin/env bash
+# Reads the SMTP (Gmail App) password from stdin into the backend .env and
+# restarts the backend. Spaces are removed (Google shows it in groups of 4).
+set -euo pipefail
+IFS= read -r pass
+pass="\${pass//[[:space:]]/}"
+[ -n "\$pass" ] || { echo "empty password" >&2; exit 1; }
+if grep -q '^SMTP_PASSWORD=' "$ENV_FILE"; then
+    sed -i "s|^SMTP_PASSWORD=.*|SMTP_PASSWORD=\$pass|" "$ENV_FILE"
+else
+    echo "SMTP_PASSWORD=\$pass" >> "$ENV_FILE"
+fi
+systemctl restart aghat-backend
+echo "SMTP password saved; backend restarted"
+HELPER
+chmod 700 /usr/local/sbin/aghat-set-smtp-password
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 

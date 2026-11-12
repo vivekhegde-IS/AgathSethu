@@ -6,7 +6,7 @@ Base prefix: /api/auth  (configured in main.py)
 So individual paths here are: /register, /login, /me, /logout
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -24,6 +24,7 @@ from app.schemas.schemas import (
     UserResponse,
 )
 from app.services.user_service import UserService
+from app.services.welcome_email import claim_welcome, email_enabled, send_welcome_email
 
 router = APIRouter()
 
@@ -118,11 +119,13 @@ def register_authority(data: AuthorityRegisterRequest, db: Session = Depends(get
     response_model=TokenResponse,
     summary="Authenticate and receive JWT",
 )
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Login endpoint.
     - Verifies email + password against bcrypt hash in PostgreSQL.
     - Enforces account status (pending/suspended accounts are rejected).
+    - On the first successful login, sends a role-specific welcome email
+      in the background.
     - Returns a signed JWT access token and basic user info.
     """
     user, reason = UserService.authenticate_with_reason(db, data.email, data.password)
@@ -133,6 +136,10 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             detail=reason or "Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if user.welcome_email_sent_at is None and email_enabled() and claim_welcome(db, user.id):
+        background_tasks.add_task(send_welcome_email, user.id, user.full_name, user.email, user.role)
+        db.refresh(user)
 
     token = create_access_token(
         data={

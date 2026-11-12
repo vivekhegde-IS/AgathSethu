@@ -1,15 +1,15 @@
 # AGHAT SETHU on AWS EC2
 
-Frontend stays on Vercel (`https://agath-sethu.vercel.app`). One EC2 instance
-runs everything else: the FastAPI backend with the full AI stack (Level 1
-routine violations, ANPR, RFID cross-verification), PostgreSQL, MediaMTX for
-the live H.264/WebRTC camera streams, and Caddy for HTTPS.
+One EC2 instance runs everything on one HTTPS address: the React website,
+the FastAPI backend with the full AI stack (Level 1 routine violations, ANPR,
+RFID cross-verification), PostgreSQL, MediaMTX for the live H.264/WebRTC
+camera streams, and Caddy (website files; /api and /ws to the backend).
 
 ```
 CARLA PC ── RTSP/TCP 8554 (H.264) ───────────────▶ ┌ EC2 (Elastic IP) ───────────────────┐
          ── WSS 443 /ws/carla/cameras (JPEG) ────▶ │ Caddy :443 → <ip-dashes>.sslip.io   │
                                                    │ uvicorn :8000  (aghat-backend)      │
-Vercel site ── HTTPS 443 /api, WSS /ws ─────────▶  │ MediaMTX :8554 / :8189 (aghat-mediamtx)
+Browser ── HTTPS 443 website, /api, WSS /ws ────▶  │ MediaMTX :8554 / :8189 (aghat-mediamtx)
 Browser ◀══ WebRTC media UDP/TCP 8189 ═══════════  │ PostgreSQL                          │
                                                    └─────────────────────────────────────┘
 ```
@@ -27,7 +27,7 @@ Browser ◀══ WebRTC media UDP/TCP 8189 ═══════════  �
      |---|---|---|---|---|
      | SSH | TCP | 22 | My IP | admin |
      | HTTP | TCP | 80 | Anywhere | HTTPS certificate |
-     | HTTPS | TCP | 443 | Anywhere | website API + WebSockets |
+     | HTTPS | TCP | 443 | Anywhere | website, API, WebSockets |
      | Custom TCP | TCP | 8554 | Anywhere | CARLA → MediaMTX (password protected) |
      | Custom UDP | UDP | 8189 | Anywhere | WebRTC video to browsers |
      | Custom TCP | TCP | 8189 | Anywhere | WebRTC fallback when UDP is blocked |
@@ -48,14 +48,10 @@ ssh -i aghat-key.pem ubuntu@<ELASTIC_IP>
 curl -fsSLO https://raw.githubusercontent.com/vivekhegde-IS/AgathSethu/main/member3/deploy/aws/setup_server.sh
 sudo SEED_AUTHORITY_PASSWORD='...' SEED_CITIZEN_PASSWORD='...' bash setup_server.sh
 ```
-At the end it prints (and saves to `/root/aghat-credentials.txt`) the Vercel
-variables and the CARLA PC settings.
+At the end it prints (and saves to `/root/aghat-credentials.txt`) the website
+address and the CARLA PC settings. Open `https://<ip-with-dashes>.sslip.io`.
 
-## 4. Point Vercel at it
-Vercel → project → **Settings → Environment Variables**: set the four printed
-`VITE_*` values, then **Deployments → ⋯ → Redeploy**.
-
-## 5. Stream from the CARLA PC
+## 4. Stream from the CARLA PC
 In the PowerShell that runs the simulation, set the four printed variables, then
 `python full_run.py`. Look for `[STREAM camN] encoding 1280x720@30`; the Live
 page tiles then show `WEBRTC`.

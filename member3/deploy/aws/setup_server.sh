@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Sets up (or updates) the AGHAT SETHU backend on an Ubuntu 24.04 EC2 instance:
-# PostgreSQL, the FastAPI backend with the full AI stack (CPU), MediaMTX for
-# the live H.264/WebRTC camera streams, systemd services and Caddy for HTTPS.
+# Sets up (or updates) AGHAT SETHU on an Ubuntu 24.04 EC2 instance: the React
+# website, PostgreSQL, the FastAPI backend with the full AI stack (CPU),
+# MediaMTX for the live H.264/WebRTC camera streams, systemd services, and
+# Caddy serving it all on one HTTPS address (/api and /ws go to the backend).
 # Safe to re-run: a re-run pulls the latest code, reinstalls dependencies,
 # migrates the database and restarts the services; secrets are kept.
 #
 #   sudo SEED_AUTHORITY_PASSWORD='...' SEED_CITIZEN_PASSWORD='...' \
 #        bash setup_server.sh
 #
-# Optional: CORS_ORIGINS (default https://agath-sethu.vercel.app),
-#           DOMAIN (default <public-ip-with-dashes>.sslip.io).
+# Optional: DOMAIN (default <public-ip-with-dashes>.sslip.io),
+#           CORS_ORIGINS (default https://$DOMAIN; add other sites comma-separated).
 # Model weights are not in git: copy aghat-models.tar.gz to /tmp first
 # (see README.md); it is unpacked into member3/ when present.
 set -euo pipefail
@@ -22,7 +23,8 @@ BACKEND=$APP_DIR/member3/backend
 DATA_DIR=/var/lib/aghat-data
 ENV_FILE=$BACKEND/.env
 MODELS_TARBALL=/tmp/aghat-models.tar.gz
-CORS_ORIGINS="${CORS_ORIGINS:-https://agath-sethu.vercel.app}"
+FRONTEND=$APP_DIR/member3/frontend
+WEB_ROOT=/var/www/aghat
 MEDIAMTX_VERSION=v1.21.1
 MEDIAMTX_SHA256=653abc672a3e693f8d3b2717752492fdcfb8072291ec108d03d3dd857411b0ee
 MEDIAMTX_ENV=/etc/aghat/mediamtx.env
@@ -44,6 +46,7 @@ cd /tmp
 # the HTTPS host (<ip-with-dashes>.sslip.io).
 PUBLIC_IP=$(curl -fsS https://checkip.amazonaws.com)
 DOMAIN="${DOMAIN:-${PUBLIC_IP//./-}.sslip.io}"
+CORS_ORIGINS="${CORS_ORIGINS:-https://$DOMAIN}"
 
 # 1) Swap: headroom for PyTorch + three detectors on a 4 GB instance ---------------
 step "Swap (4 GB)"
@@ -60,7 +63,7 @@ swapon --show
 step "System packages (Python 3.11, PostgreSQL, Caddy)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y software-properties-common curl git gnupg openssl postgresql libgl1 \
+apt-get install -y software-properties-common curl git gnupg openssl rsync postgresql libgl1 \
     debian-keyring debian-archive-keyring apt-transport-https
 apt-get install -y libglib2.0-0t64 || apt-get install -y libglib2.0-0
 if ! command -v python3.11 >/dev/null; then
@@ -75,6 +78,14 @@ if ! command -v caddy >/dev/null; then
         > /etc/apt/sources.list.d/caddy-stable.list
     apt-get update -y
     apt-get install -y caddy
+fi
+if ! node --version 2>/dev/null | grep -q '^v24\.'; then
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |
+        gpg --batch --yes --dearmor -o /usr/share/keyrings/nodesource.gpg
+    echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
+        > /etc/apt/sources.list.d/nodesource.list
+    apt-get update -y
+    apt-get install -y nodejs
 fi
 
 # 3) Code -----------------------------------------------------------------------------
@@ -239,18 +250,51 @@ systemctl daemon-reload
 systemctl enable aghat-backend
 systemctl restart aghat-backend
 
-# 9) HTTPS ----------------------------------------------------------------------------
+# 9) Website --------------------------------------------------------------------------
+step "Website build (React/Vite)"
+# .env.production.local is git-ignored, so pulls stay clean.
+cat > "$FRONTEND/.env.production.local" <<ENV
+VITE_API_BASE_URL=https://$DOMAIN/api
+VITE_WS_URL=wss://$DOMAIN/ws
+VITE_LIVE_CAMERA_WS_URL=wss://$DOMAIN/ws/live-cameras
+VITE_WEBRTC_ENABLED=true
+VITE_ENABLE_REAL_AUTH=true
+VITE_ENABLE_MOCK_DATA=true
+VITE_APP_NAME=AGHAT SETHU
+VITE_APP_ENVIRONMENT=production
+VITE_JWT_STORAGE_KEY=aghat_sethu_jwt
+ENV
+chown "$APP_USER:$APP_USER" "$FRONTEND/.env.production.local"
+(cd "$FRONTEND" && as_app npm ci --no-audit --no-fund && as_app npm run build)
+# Caddy cannot read the app user's home: publish the build to /var/www.
+mkdir -p "$WEB_ROOT"
+rsync -a --delete "$FRONTEND/dist/" "$WEB_ROOT/"
+chmod -R a+rX "$WEB_ROOT"
+
+# 10) HTTPS ---------------------------------------------------------------------------
 step "Caddy (HTTPS for $DOMAIN)"
 cat > /etc/caddy/Caddyfile <<CADDY
 $DOMAIN {
     encode gzip
-    reverse_proxy 127.0.0.1:8000
+
+    # API and WebSockets -> FastAPI
+    @backend path /api/* /ws/*
+    handle @backend {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Everything else -> the React app (client-side routes fall back to index.html)
+    handle {
+        root * $WEB_ROOT
+        try_files {path} /index.html
+        file_server
+    }
 }
 CADDY
 systemctl enable caddy
 systemctl reload caddy || systemctl restart caddy
 
-# 10) Check ---------------------------------------------------------------------------
+# 11) Check ---------------------------------------------------------------------------
 step "Waiting for the backend"
 for _ in $(seq 1 60); do
     curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1 && break
@@ -262,13 +306,8 @@ systemctl is-active --quiet aghat-mediamtx || fail "MediaMTX not running: journa
 cat > "$CREDENTIALS" <<CREDS
 AGHAT SETHU on $DOMAIN ($PUBLIC_IP)
 
+Website:  https://$DOMAIN
 Backend:  https://$DOMAIN/api/health
-
-Vercel environment variables:
-  VITE_API_BASE_URL=https://$DOMAIN/api
-  VITE_WS_URL=wss://$DOMAIN/ws
-  VITE_LIVE_CAMERA_WS_URL=wss://$DOMAIN/ws/live-cameras
-  VITE_WEBRTC_ENABLED=true
 
 CARLA PC (PowerShell, before python full_run.py):
   \$env:STREAM_RTSP_BASE = "rtsp://$PUBLIC_IP:8554"

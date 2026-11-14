@@ -10,14 +10,8 @@ import React from 'react'
 import { Link, Outlet } from 'react-router-dom'
 
 export const PortalEmblem: React.FC<{ size?: number }> = ({ size = 52 }) => (
-  // The portal's own logo mark (not a government emblem).
-  <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label="AGHAT SETHU logo">
-    <circle cx="32" cy="32" r="30" fill="#ffffff" stroke="#1e3a8a" strokeWidth="3" />
-    <circle cx="32" cy="32" r="22" fill="none" stroke="#1e3a8a" strokeWidth="1.5" strokeDasharray="2 3" />
-    <path d="M14 40 Q32 18 50 40" fill="none" stroke="#1e3a8a" strokeWidth="3" strokeLinecap="round" />
-    <path d="M20 40 V46 M32 30 V46 M44 40 V46" stroke="#1e3a8a" strokeWidth="2.5" strokeLinecap="round" />
-    <path d="M12 46 H52" stroke="#c2410c" strokeWidth="3" strokeLinecap="round" />
-  </svg>
+  // The portal's own logo mark (not a government emblem), served from public/logo.png.
+  <img src="/logo.png" width={size} height={size} alt="AGHAT SETHU logo" className="rounded-xl" />
 )
 
 export const OfficialHeader: React.FC = () => (

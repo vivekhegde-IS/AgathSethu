@@ -12,6 +12,8 @@ import { useAuthStore } from '@stores/authStore'
 // ─── Public Pages ────────────────────────────────────────────────────────────────
 import { Home } from '@pages/public/Home'
 import { InfoPage } from '@pages/public/InfoPage'
+import { NotFound } from '@pages/public/NotFound'
+import { PageTitle } from '@components/layout/PageTitle'
 
 // ─── Layouts ─────────────────────────────────────────────────────────────────────
 import { OfficialLayout } from '@components/layout/OfficialLayout'
@@ -74,6 +76,7 @@ export default function App() {
   return (
     <Router>
       <AuthInitializer>
+        <PageTitle />
         <Routes>
 
           {/* ── PUBLIC ROUTES ── */}
@@ -87,6 +90,8 @@ export default function App() {
             <Route path="/terms" element={<InfoPage page="terms" />} />
             <Route path="/accessibility" element={<InfoPage page="accessibility" />} />
             <Route path="/help" element={<InfoPage page="help" />} />
+            {/* ── CATCH-ALL: unknown URLs get a "Page not found" page ── */}
+            <Route path="*" element={<NotFound />} />
           </Route>
 
           {/* ── CITIZEN PORTAL ── */}
@@ -137,9 +142,6 @@ export default function App() {
             <Route path="incident-evidence" element={<LegacyIncidentRedirect />} />
             <Route path="incident-evidence/:incidentId" element={<LegacyIncidentRedirect />} />
           </Route>
-
-          {/* ── CATCH-ALL ── */}
-          <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
       </AuthInitializer>

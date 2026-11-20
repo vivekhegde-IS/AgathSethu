@@ -94,8 +94,9 @@ def report_view(db, report: CrashReport, for_authority: bool) -> dict:
     answer = (db.query(CrashResponse).filter(CrashResponse.user_id == owner.id,
                                              CrashResponse.incident_ref == report.incident_key).one_or_none()
               if owner is not None and report.source == "own" else None)
-    from app.services.crash_response import response_view   # avoid an import cycle
+    from app.services.crash_response import case_view, response_view   # avoid an import cycle
     view["owner_response"] = response_view(db, answer, for_authority=for_authority)
+    view["case"] = case_view(db, report.incident_key)
     if for_authority:
         partner = db.get(Vehicle, report.partner_vehicle_id) if report.partner_vehicle_id else None
         view.update(alert_id=report.alert_id, decision_route=report.decision_route,

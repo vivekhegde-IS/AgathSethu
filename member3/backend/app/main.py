@@ -23,6 +23,7 @@ from app.routers import routine_violation
 from app.routers import webrtc_streams
 from app.routers import google_auth
 from app.routers import live
+from app.routers import admin_accounts
 
 
 @asynccontextmanager
@@ -163,6 +164,8 @@ app.include_router(authority_ops.router)
 # Sign in with Google (owners only), live dashboards (/me, /authority) + /ws/events
 app.include_router(google_auth.router)
 app.include_router(live.router)
+# Admin: approve officer sign-ups (the mobile app's "Officer Approvals" tab)
+app.include_router(admin_accounts.router)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

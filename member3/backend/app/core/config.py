@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     # One crash notification per vehicle per incident: alerts for the same car
     # (or its partner) within this many seconds belong to the same incident.
     CRASH_NOTIFY_COOLDOWN_S: float = 120.0
+    # Two-vehicle crash: after one owner answers "minor" / "false alarm", the
+    # other owner has this many seconds to answer too, else the case is flagged
+    # "not resolved" for the authority.
+    CRASH_PARTNER_ANSWER_WINDOW_S: float = 30.0
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH) if ENV_PATH.exists() else ".env",

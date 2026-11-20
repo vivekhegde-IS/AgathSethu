@@ -111,8 +111,8 @@ def read_one(notification_id: str, user: User = Depends(require_citizen), db: Se
     return _notification_view(note)
 
 
-def _status_label(incident_status: str | None, answer: CrashResponse | None) -> str:
-    if incident_status == "resolved":
+def _status_label(incident_status: str | None, answer: CrashResponse | None, case: dict | None = None) -> str:
+    if incident_status == "resolved" or (case or {}).get("outcome") == "resolved":
         return "Resolved"
     if incident_status == "false_positive" or (answer is not None and answer.response == "false_alarm"
                                                and answer.review_status == "accepted"):
@@ -128,7 +128,9 @@ def _my_crash(db: Session, user: User, key: str) -> dict:
         raise HTTPException(status_code=404, detail="Incident not found")
     report = (db.query(CrashReport).filter(CrashReport.incident_key == key,
                                            CrashReport.vehicle_id == vehicle.id).first())
+    crash_response.sweep_overdue(db)
     answer = crash_response.find_response(db, user.id, key)
+    case = crash_response.case_view(db, key)
     plate = format_plate(vehicle.plate_number) or vehicle.plate_number
     notes = [n for n in db.query(Notification).filter(Notification.user_id == user.id,
                                                       Notification.kind == "crash")
@@ -137,9 +139,10 @@ def _my_crash(db: Session, user: User, key: str) -> dict:
         "id": key, "reference": key,
         "crash_at": _iso(report.created_at.astimezone(IST) if report and report.created_at else None),
         "location": report.location if report else "an unknown junction",
-        "status": _status_label(None, answer), "resolved_at": None,
+        "status": _status_label(None, answer, case), "resolved_at": case.get("decided_at") if case and case["outcome"] == "resolved" else None,
         "your_vehicles": [plate], "involved_vehicles": [plate], "role_determined": False,
         "response": crash_response.response_view(db, answer),
+        "case": case,
         "notifications": [_notification_view(n) for n in notes],
     }
 
@@ -165,6 +168,8 @@ def my_incident(incident_id: str, response: Response, user: User = Depends(requi
     mine = sorted({v.plate_norm for v in involved if v.plate_norm in plates})
     if incident is None or not mine:
         raise HTTPException(status_code=404, detail="Incident not found")
+    crash_response.sweep_overdue(db)
+    db.refresh(incident)
     answer = crash_response.find_response(db, user.id, incident_id)
     when = incident.created_at.astimezone(IST) if incident.created_at else None
     return {
@@ -183,6 +188,7 @@ def my_incident(incident_id: str, response: Response, user: User = Depends(requi
                           .filter(Notification.user_id == user.id, Notification.kind == KIND_CRASH,
                                   Notification.incident_id == incident.id).all()],
         "response": crash_response.response_view(db, answer),
+        "case": crash_response.case_view(db, incident_id),
     }
 
 

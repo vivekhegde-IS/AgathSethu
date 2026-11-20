@@ -77,6 +77,19 @@ export interface CrashResponseView {
   owner_phone?: string | null
   plate?: string | null
   letter?: string | null
+  case?: CaseView | null
+}
+
+/** A crash's outcome from its owners' answers (null until someone answers). */
+export interface CaseView {
+  incident_ref: string
+  outcome: 'waiting' | 'resolved' | 'not_resolved'
+  reason_code: 'all_minor' | 'accident' | 'no_answer' | 'authority' | null
+  reason: string | null
+  automatic: boolean
+  deadline_at: string | null
+  decided_at: string | null
+  vehicles: { plate: string; answer: CrashAnswer | null }[]
 }
 
 export interface CrashReportView {
@@ -89,6 +102,7 @@ export interface CrashReportView {
   created_at: string | null
   vehicle: VehicleView | null
   owner_response?: CrashResponseView | null
+  case?: CaseView | null
   // authority only
   alert_id?: string | null
   decision_route?: string | null
@@ -136,7 +150,7 @@ export interface AuthorityLive {
 export type LiveEventType =
   | 'fine.issued' | 'fine.updated' | 'crash.detected' | 'crash.partner_named'
   | 'hit_and_run.detected' | 'notification.created' | 'review.updated'
-  | 'crash.response' | 'crash.response_reviewed'
+  | 'crash.response' | 'crash.response_reviewed' | 'crash.case_updated'
 
 export interface LiveEvent {
   type: LiveEventType
@@ -148,6 +162,7 @@ export interface LiveEvent {
     notification?: NotificationView
     sms?: SmsView
     response?: CrashResponseView
+    case?: CaseView | null
   }
 }
 

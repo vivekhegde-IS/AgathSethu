@@ -16,7 +16,7 @@
  *   PATCH /auth/me                         {full_name, email, phone}
  */
 
-import type { CrashResponseView } from './live'
+import type { CaseView, CrashResponseView } from './live'
 import apiClient from './apiClient'
 import type { UserResponse } from './auth'
 
@@ -84,6 +84,12 @@ export interface BoardIncident {
   resolved_at: string | null
   resolved_by_name: string | null
   resolution_note: string | null
+  /** closed as a false alarm (status false_positive) */
+  false_alarm?: boolean
+  /** owners' "are you safe?" answers, newest first, and the case outcome from them */
+  citizen_responses?: CrashResponseView[]
+  latest_citizen_response?: CrashResponseView | null
+  case?: CaseView | null
   involved_plates: string[]
   involved_plates_display: (string | null)[]
   camera_stream: string | null
@@ -269,6 +275,7 @@ export interface CitizenIncident {
   involved_vehicles: string[]
   role_determined: boolean
   response?: CrashResponseView | null
+  case?: CaseView | null
 }
 
 export async function fetchCitizenIncident(id: string): Promise<CitizenIncident> {

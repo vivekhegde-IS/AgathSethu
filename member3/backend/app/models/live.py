@@ -1,6 +1,6 @@
 """
 AGHAT SETHU — Live crash notifications, authority review queue, SMS log and
-Google sign-in state (migration 009); owners' crash answers (migration 010).
+Google sign-in state (migration 009); owners' crash answers (migration 010); crash case outcomes (011).
 """
 
 import uuid
@@ -134,6 +134,31 @@ class CrashResponse(Base):
         Index("ix_crash_responses_ref", "incident_ref"),
         Index("ix_crash_responses_review", "review_status", "responded_at"),
     )
+
+
+class CrashCaseOutcome(Base):
+    """Automatic outcome of one crash from its owners' answers (migration 011).
+
+    resolved      every involved vehicle's owner answered minor / false alarm
+    not_resolved  an owner reported an accident, or the other owner did not
+                  answer within CRASH_PARTNER_ANSWER_WINDOW_S
+    waiting       some owners answered minor, others still have time
+    The authority's accept / reject also lands here (decided_by set)."""
+
+    __tablename__ = "crash_case_outcomes"
+
+    incident_ref = Column(String(64), primary_key=True)      # CR-... key or incidents.id
+    ref_kind = Column(String(12), nullable=False)            # crash | incident
+    outcome = Column(String(16), nullable=False)             # waiting | resolved | not_resolved
+    reason_code = Column(String(24), nullable=True)          # all_minor | accident | no_answer | authority
+    reason = Column(Text, nullable=True)
+    first_answer_at = Column(DateTime(timezone=True), nullable=True)
+    deadline_at = Column(DateTime(timezone=True), nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    decided_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (Index("ix_crash_case_outcomes_waiting", "outcome", "deadline_at"),)
 
 
 def new_incident_key() -> str:

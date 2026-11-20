@@ -43,6 +43,7 @@ from app.models.models import (
     Vehicle,
     VisionMatch,
 )
+from app.services import crash_response
 from app.services.anpr_partial import analyze_reads as analyze_partial_plate
 from app.services.anpr_partial import known_char_count, match_pattern
 from app.services.fine_service import registry_candidates, rfid_registry_candidates
@@ -159,23 +160,34 @@ def camera_stream_for(junction_id: str | None) -> str | None:
     return None
 
 
+# A crash the authority (or its owners' answers) closed: resolved, or resolved as a false alarm.
+CLOSED = ("resolved", "false_positive")
+
+
 def _resolution(db: Session, incident: Incident, vehicles) -> dict:
     """Operator-facing fields: reference, plates of the involved vehicles,
     resolution state and who resolved it."""
     resolver = db.get(User, incident.resolved_by) if incident.resolved_by else None
     involved = sorted({v.plate_norm for v in vehicles if v.plate_norm and v.role == "involved"})
+    answers = [crash_response.response_view(db, r, for_authority=True)
+               for r in crash_response.responses_for(db, str(incident.id))]
     return {
         "reference": incident_reference(incident.id),
         "location": junction_label(incident.crash_junction),
         "involved_plates": involved,
         "involved_plates_display": [format_plate(p) for p in involved],
-        "resolved": incident.status == "resolved",
+        "resolved": incident.status in CLOSED,
+        "false_alarm": incident.status == "false_positive",
         "resolved_at": _iso(incident.resolved_at),
         "resolved_by_name": resolver.full_name if resolver else None,
         "resolution_note": incident.resolution_note,
+        # owners' "are you safe?" answers (app / website) and the case outcome from them
+        "citizen_responses": answers,
+        "latest_citizen_response": answers[0] if answers else None,
+        "case": crash_response.case_view(db, str(incident.id)),
         "camera_stream": camera_stream_for(incident.crash_junction),
         # "View live feed" only for an unresolved crash of the run streaming right now
-        "live_feed": bool(incident.status != "resolved" and incident.run_id
+        "live_feed": bool(incident.status not in CLOSED and incident.run_id
                           and incident.run_id == _live_run_id() and _feed_live(incident.crash_junction)),
     }
 
@@ -240,6 +252,7 @@ async def incident_board(
              optionally only one IST calendar day (?date=YYYY-MM-DD) and/or a
              search (?q=) on the incident ID or the plate of any involved vehicle.
     """
+    crash_response.sweep_overdue(db)
     query = _board_query(db)
     if view == "radar":
         query = query.filter(Incident.created_at >= _ist_day_start())
@@ -252,9 +265,9 @@ async def incident_board(
             "resolved_today": [i for i in items if i["resolved"]],
         }
     if status == "resolved":
-        query = query.filter(Incident.status == "resolved")
+        query = query.filter(Incident.status.in_(CLOSED))
     elif status == "unresolved":
-        query = query.filter(Incident.status != "resolved")
+        query = query.filter(Incident.status.notin_(CLOSED))
     if day is not None:
         start = datetime.combine(day, time.min, tzinfo=IST)
         query = query.filter(Incident.created_at >= start, Incident.created_at < start + timedelta(days=1))
@@ -280,7 +293,7 @@ async def resolve_incident(incident_id: str, body: ResolveRequest,
     incident = _load(db, incident_id)
     if not verify_password(body.password, officer.password_hash):
         raise HTTPException(status_code=403, detail="Password is incorrect.")
-    if incident.status == "resolved":
+    if incident.status in CLOSED:
         raise HTTPException(status_code=409, detail="Incident is already resolved.")
     incident.status = "resolved"
     incident.resolved_at = datetime.now(timezone.utc)
@@ -306,6 +319,7 @@ async def list_incidents(
     Defaults to LIVE runs only (replays and synthetic simulator runs are behind
     the ``source`` filter) and hides archived incidents.
     """
+    crash_response.sweep_overdue(db)
     query = db.query(Incident).filter(Incident.dedupe_key.isnot(None))
     if source != "all":
         query = query.filter(Incident.source == source)

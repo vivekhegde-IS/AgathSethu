@@ -12,6 +12,7 @@ import {
 import { extractAuthError } from '@api/auth'
 import { useLiveEvents } from '@hooks/useLiveEvents'
 import { FineStatusBadge, LivePill, rupees, ToastStack, useToasts, when } from '@components/live/LiveWidgets'
+import { CaseBadge, caseLabel } from '@components/authority/OwnerAnswers'
 
 const REASONS = ['Red-light violation', 'Over-speeding', 'No seat belt', 'Wrong-way driving', 'Using phone while driving']
 
@@ -77,6 +78,7 @@ const AnswerCard: React.FC<{ item: CrashResponseView; onDecide: (accept: boolean
       <div className="flex flex-wrap items-center gap-2">
         <AnswerBadge answer={item} />
         <span className="font-mono text-xs text-slate-600">{item.incident_ref}</span>
+        <CaseBadge value={item.case} />
         <span className="ml-auto text-xs text-slate-600">via {item.channel === 'app' ? 'mobile app' : 'website'} · {when(item.responded_at)}</span>
       </div>
       <p className="mt-2 text-sm text-slate-900">
@@ -84,15 +86,16 @@ const AnswerCard: React.FC<{ item: CrashResponseView; onDecide: (accept: boolean
         {item.owner_phone && <> · <a className="text-blue-800 underline" href={`tel:${item.owner_phone}`}>{item.owner_phone}</a></>}
       </p>
       {item.note && <p className="text-xs text-slate-700 mt-1">Owner's note: {item.note}</p>}
+      {item.case?.reason && <p className="text-xs text-slate-600 mt-1">{item.case.reason}</p>}
       {pending ? (
         <div className="mt-3 flex flex-wrap gap-2 items-center">
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note to the owner (optional)"
                  className="flex-1 min-w-[160px] border rounded px-2 py-1 text-sm" />
           <button onClick={() => onDecide(true, note)} className="px-3 py-1 rounded bg-green-700 text-white text-sm">
-            Accept: {item.response === 'false_alarm' ? 'false alarm' : 'minor'}
+            {item.response === 'false_alarm' ? 'Resolve as false alarm' : 'Resolve as minor crash'}
           </button>
           <button onClick={() => onDecide(false, note)} className="px-3 py-1 rounded border border-slate-400 text-sm">
-            Reject: keep as crash
+            Keep open
           </button>
         </div>
       ) : item.review_note && <p className="text-xs text-slate-600 mt-1">Note: {item.review_note}</p>}
@@ -113,6 +116,7 @@ export const ControlRoom: React.FC = () => {
 
   const onEvent = useCallback((event: LiveEvent) => {
     const { fine, report, review, response } = event.data
+    const outcome = event.data.case
     if (event.type === 'fine.updated' && fine) {
       push({ type: fine.status === 'paid' ? 'success' : 'warning', title: `Fine #${fine.id} ${fine.status}`,
              message: `${fine.plate} · ${fine.owner_name ?? ''}` })
@@ -124,6 +128,9 @@ export const ControlRoom: React.FC = () => {
       push({ type: response.response === 'accident' ? 'danger' : 'warning',
              title: response.response === 'accident' ? 'Owner confirms accident' : 'Owner answered: check needed',
              message: `${response.plate ?? ''} · ${response.owner_name ?? ''} · ${response.label}` })
+    } else if (event.type === 'crash.case_updated' && outcome && outcome.outcome !== 'waiting') {
+      push({ type: outcome.outcome === 'resolved' ? 'success' : 'danger',
+             title: `${outcome.incident_ref}: ${caseLabel(outcome)}`, message: outcome.reason ?? '' })
     } else if (event.type === 'hit_and_run.detected' && review) {
       push({ type: 'danger', title: 'Hit-and-run: review needed', message: `${review.accused?.plate} left the scene` })
     }
@@ -177,8 +184,9 @@ export const ControlRoom: React.FC = () => {
           {data.pending_responses > 0 && <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-600 text-white text-xs">{data.pending_responses}</span>}
         </h2>
         <p className="px-4 pt-2 text-xs text-slate-600">
-          What owners answered to "Are you safe?" in the mobile app or on the website. A false alarm or minor
-          crash only closes the incident once you accept it.
+          What owners answered to "Are you safe?" in the mobile app or on the website. A crash closes by itself
+          only when every involved owner answers minor / false alarm (one car: that owner; two cars: both).
+          If one reports an accident or the other does not answer within 30 s, it stays open for you to decide.
         </p>
         <ul className="divide-y mt-2 max-h-96 overflow-y-auto">
           {data.responses.length === 0 && <li className="px-4 py-6 text-center text-slate-500 text-sm">No answers yet</li>}
@@ -248,6 +256,7 @@ export const ControlRoom: React.FC = () => {
                 {c.source === 'partner' && <span className="ml-1 text-xs text-orange-800">[named as partner]</span>}
                 {c.partner && <> · with {c.partner.plate}</>}
                 {c.owner_response && <span className="ml-2"><AnswerBadge answer={c.owner_response} /></span>}
+                {c.case && <span className="ml-2"><CaseBadge value={c.case} /></span>}
                 <p className="text-xs text-slate-600">
                   {c.incident_key} · {c.status} · {c.decision_route_label ?? 'single vehicle'} · {c.location} · {when(c.created_at)}
                 </p>

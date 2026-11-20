@@ -110,6 +110,7 @@ def read_all_sms(user: User = Depends(require_citizen), db: Session = Depends(ge
 @router.get("/api/authority/live", dependencies=[Depends(require_authority)])
 def authority_live(response: Response, db: Session = Depends(get_db)):
     response.headers.update(NO_STORE)
+    crash_response.sweep_overdue(db)
     fleet = db.query(Vehicle).filter(Vehicle.carla_letter.isnot(None)).order_by(Vehicle.carla_letter).all()
     fines = db.query(Fine).order_by(Fine.detected_at.desc(), Fine.id.desc()).limit(100).all()
     reports = db.query(CrashReport).order_by(CrashReport.created_at.desc()).limit(100).all()
@@ -123,7 +124,8 @@ def authority_live(response: Response, db: Session = Depends(get_db)):
         "crashes": [report_view(db, r, for_authority=True) for r in reports],
         "reviews": [review_view(db, r) for r in reviews],
         "pending_reviews": sum(1 for r in reviews if r.status == "pending"),
-        "responses": [crash_response.response_view(db, r, for_authority=True) for r in answers],
+        "responses": [crash_response.response_view(db, r, for_authority=True)
+                      | {"case": crash_response.case_view(db, r.incident_ref)} for r in answers],
         "pending_responses": sum(1 for r in answers if r.review_status == "pending"),
     }
 

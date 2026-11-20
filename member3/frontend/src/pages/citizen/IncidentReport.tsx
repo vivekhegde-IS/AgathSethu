@@ -78,7 +78,7 @@ export const CitizenIncidentReport: React.FC = () => {
       )}
       {data && incidentId && (
         <Card title={data.response ? 'Your answer' : 'Are you safe?'}>
-          <CrashAnswerPanel refId={incidentId} current={data.response}
+          <CrashAnswerPanel refId={incidentId} current={data.response} outcome={data.case}
                             onAnswered={(answer) => setData({ ...data, response: answer })} />
         </Card>
       )}

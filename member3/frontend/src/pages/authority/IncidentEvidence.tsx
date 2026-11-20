@@ -16,6 +16,8 @@ import { Link, useParams } from 'react-router-dom'
 import { AuthImage, Badge, Button, Card, Spinner } from '@components/ui'
 import { ResolveIncidentModal } from '@components/authority/ResolveIncidentModal'
 import { CrashTypeBadge } from '@components/authority/CrashTypeBadge'
+import { CaseBadge, OwnerAnswers } from '@components/authority/OwnerAnswers'
+import type { CaseView, CrashResponseView } from '@api/live'
 import { subscribeToLiveCameraMessages } from '@services/websocket/liveCamerasSocket'
 import { errorMessage, formatIst } from '@api/portal'
 import {
@@ -104,6 +106,7 @@ export const IncidentEvidencePage: React.FC = () => {
                   {resolved ? 'Resolved' : 'Unresolved'}
                 </Badge>
                 <CrashTypeBadge kind={incident} />
+                <CaseBadge value={incident.case as CaseView | null | undefined} />
               </>
             )}
           </div>
@@ -116,6 +119,10 @@ export const IncidentEvidencePage: React.FC = () => {
           )}
           {resolved && typeof incident?.resolution_note === 'string' && (
             <p className="text-xs text-emerald-700 font-mono mt-1">Note: {incident.resolution_note}</p>
+          )}
+          {incident && (
+            <OwnerAnswers answers={incident.citizen_responses as CrashResponseView[] | undefined}
+                          value={incident.case as CaseView | null | undefined} onChanged={refresh} />
           )}
         </div>
         {incident && (

@@ -76,13 +76,40 @@ second -> press "False alarm" -> the website's authority Control Room
 (/authority) shows "Owner: false alarm" live without a refresh.
 ```
 
+## Crash case outcome (automatic)
+
+"Minor" = `not_serious` or `false_alarm` (no need to involve the authority).
+
+| Situation | Outcome |
+|---|---|
+| Single-vehicle crash, the owner answers minor | **resolved** at once (incident status `resolved`) |
+| Two-vehicle crash, **both** owners answer minor | **resolved** |
+| Two-vehicle crash, one minor + the other answers accident | **not resolved** |
+| Two-vehicle crash, one minor + the other does not answer within **30 s** | **not resolved** (a late answer does not undo it) |
+| Any owner answers accident (also later) | **not resolved**; an auto-resolved case reopens |
+
+A vehicle whose owner cannot answer (unregistered, or only named as a partner)
+never answers, so such a crash is never auto-resolved. Not-resolved cases keep the
+minor answers `review_status: "pending"`; the authority then clicks
+**Resolve as false alarm / minor crash** (`POST /api/authority/crash-responses/{id}/accept`,
+false alarm -> incident `false_positive`, `resolved_at` / `resolved_by` set) or
+**Keep open** (`/reject`).
+
+Fields for the app (citizen and officer screens):
+- `POST .../confirm` reply: `review_status` is `"accepted"` straight away when the case auto-resolves.
+- `GET /api/citizen/incidents/{id}` and authority `GET /api/incidents/board`, `GET /api/incidents/{id}`
+  (under `incident`): `"case": {"outcome": "waiting"|"resolved"|"not_resolved", "reason_code":
+  "all_minor"|"accident"|"no_answer"|"authority", "reason", "automatic", "deadline_at",
+  "vehicles": [{"plate", "answer"}]}`.
+- Authority incident endpoints also carry `citizen_responses` (newest first, each with `id`,
+  `response`, `review_status`, `plate`, `owner_name`) and `latest_citizen_response`; `resolved`
+  is true for `resolved` and `false_positive`, and `false_alarm` marks the latter.
+- `/ws/events`: `{"type": "crash.case_updated", "data": {"case": {...}}}` to the authority and the
+  owners of that crash, besides `crash.response` / `crash.response_reviewed`.
+
 ## How the authority side behaves
 
-- Every answer appears live in **Control Room → Owner answers** and as a badge on
-  the crash in **Crash alerts**, with the owner's name and phone.
-- **Accident** needs no decision. **False alarm** / **Minor** wait for
-  *Accept* / *Reject*. Only an accepted false alarm closes an incident
-  (`incidents.status = false_positive`); an accepted minor sets severity `low`.
-  The owner is notified of the decision live.
-- If the owner later changes the answer to *accident*, the answer goes back to
-  the control room and an incident closed as a false alarm is reopened.
+- Every answer appears live in **Control Room -> Owner answers**, on the crash in
+  **Crash alerts**, and on the **Incident Radar** / **Incident Evidence** pages, with
+  the case outcome badge (auto-resolved / not resolved / waiting).
+- The Incident Radar now updates live as answers arrive.

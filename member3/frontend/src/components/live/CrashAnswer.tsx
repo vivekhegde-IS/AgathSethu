@@ -14,7 +14,7 @@
 
 import React, { useCallback, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { answerCrash, CrashAnswer, CrashResponseView, LiveEvent } from '@api/live'
+import { answerCrash, CaseView, CrashAnswer, CrashResponseView, LiveEvent } from '@api/live'
 import { fetchNotifications } from '@api/portal'
 import { extractAuthError } from '@api/auth'
 import { Modal } from '@components/ui'
@@ -22,6 +22,12 @@ import { useLiveEvents } from '@hooks/useLiveEvents'
 import { ToastStack, useToasts, when } from './LiveWidgets'
 
 const PROMPT_WINDOW_MS = 6 * 60 * 60 * 1000     // only ask about crashes from the last 6 hours
+
+const CASE_TEXT: Record<CaseView['outcome'], string> = {
+  resolved: 'Case closed: no further action from the traffic authority.',
+  not_resolved: 'Case kept open: the traffic authority will review it.',
+  waiting: "Waiting for the other vehicle's owner to answer (up to 30 seconds).",
+}
 
 const REVIEW_TEXT: Record<string, string> = {
   pending: 'Waiting for the traffic authority to check it.',
@@ -33,9 +39,10 @@ const REVIEW_TEXT: Record<string, string> = {
 export const CrashAnswerPanel: React.FC<{
   refId: string
   current?: CrashResponseView | null
+  outcome?: CaseView | null
   onAnswered?: (answer: CrashResponseView) => void
   compact?: boolean
-}> = ({ refId, current, onAnswered, compact }) => {
+}> = ({ refId, current, outcome, onAnswered, compact }) => {
   const [busy, setBusy] = useState<CrashAnswer | null>(null)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
@@ -74,8 +81,14 @@ export const CrashAnswerPanel: React.FC<{
           <p className="font-semibold text-slate-900">You answered: {current.label}</p>
           <p className="text-xs text-slate-600">
             {when(current.responded_at)} · from the {current.channel === 'app' ? 'mobile app' : 'website'}
-            {current.review_status && <> · {REVIEW_TEXT[current.review_status]}</>}
+            {!outcome && current.review_status && <> · {REVIEW_TEXT[current.review_status]}</>}
           </p>
+          {outcome && (
+            <p className={`text-xs mt-1 font-semibold ${outcome.outcome === 'resolved' ? 'text-emerald-800'
+              : outcome.outcome === 'not_resolved' ? 'text-red-800' : 'text-amber-800'}`}>
+              {CASE_TEXT[outcome.outcome]}{outcome.reason ? ` ${outcome.reason}` : ''}
+            </p>
+          )}
           {current.review_note && <p className="text-xs text-slate-600 mt-1">Authority note: {current.review_note}</p>}
         </div>
       )}
@@ -95,8 +108,8 @@ export const CrashAnswerPanel: React.FC<{
         />
       )}
       <p className="text-xs text-slate-600">
-        "False alarm" and "Minor" are checked by the traffic authority before the crash is closed.
-        If anyone is hurt, call <a href="tel:112" className="font-semibold text-red-700 underline">112</a>.
+        If every vehicle's owner answers "Minor" or "False alarm", the case closes without the traffic
+        authority; in a two-vehicle crash the other owner must answer within 30 seconds. If anyone is hurt, call <a href="tel:112" className="font-semibold text-red-700 underline">112</a>.
       </p>
       {error && <p className="text-xs text-red-700">{error}</p>}
     </div>
@@ -141,6 +154,7 @@ export const CitizenLiveBridge: React.FC = () => {
 
   const onEvent = useCallback((event: LiveEvent) => {
     const { report, notification, response } = event.data
+    const outcome = event.data.case
     if (event.type === 'crash.detected' && report) {
       ask({
         ref: report.incident_key,
@@ -149,6 +163,10 @@ export const CitizenLiveBridge: React.FC = () => {
       })
     } else if (onOwnerPage) {
       return
+    } else if (event.type === 'crash.case_updated' && outcome && outcome.outcome !== 'waiting') {
+      push({ type: outcome.outcome === 'resolved' ? 'success' : 'warning',
+             title: outcome.outcome === 'resolved' ? 'Crash case closed' : 'Crash case kept open',
+             message: outcome.reason ?? '' })
     } else if (event.type === 'crash.response_reviewed' && response) {
       push({ type: response.review_status === 'accepted' ? 'success' : 'warning',
              title: 'Crash report reviewed', message: REVIEW_TEXT[response.review_status ?? ''] })

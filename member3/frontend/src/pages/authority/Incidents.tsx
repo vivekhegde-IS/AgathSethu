@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { Badge, Button, Card, Spinner } from '@components/ui'
 import { CrashTypeBadge } from '@components/authority/CrashTypeBadge'
 import { ResolveIncidentModal } from '@components/authority/ResolveIncidentModal'
+import { CaseBadge, OwnerAnswers } from '@components/authority/OwnerAnswers'
 import { BoardIncident, RadarBoard, errorMessage, fetchRadar, formatIst } from '@api/portal'
+import type { LiveEvent } from '@api/live'
+import { useLiveEvents } from '@hooks/useLiveEvents'
 
 // New crashes are created by the backend as they happen; the list refreshes on this interval.
 const REFRESH_MS = 15000
@@ -34,6 +37,14 @@ export const IncidentDashboard: React.FC = () => {
     return () => window.clearInterval(timer)
   }, [load])
 
+  // live: owners' answers and auto-resolved cases appear without a refresh
+  useLiveEvents(
+    useCallback((event: LiveEvent) => {
+      if (event.type.startsWith('crash.')) load()
+    }, [load]),
+    load,
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -63,7 +74,8 @@ export const IncidentDashboard: React.FC = () => {
           ) : (
             <ul className="divide-y divide-slate-200">
               {board.active.map((incident) => (
-                <IncidentRow key={incident.id} incident={incident} onResolve={() => setResolving(incident)} />
+                <IncidentRow key={incident.id} incident={incident} onResolve={() => setResolving(incident)}
+                             onChanged={load} />
               ))}
             </ul>
           )}
@@ -75,7 +87,9 @@ export const IncidentDashboard: React.FC = () => {
   )
 }
 
-const IncidentRow: React.FC<{ incident: BoardIncident; onResolve?: () => void }> = ({ incident, onResolve }) => {
+const IncidentRow: React.FC<{ incident: BoardIncident; onResolve?: () => void; onChanged?: () => void }> = ({
+  incident, onResolve, onChanged,
+}) => {
   const plates = incident.involved_plates_display.filter(Boolean) as string[]
   return (
     <li className="py-3 flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
@@ -86,6 +100,7 @@ const IncidentRow: React.FC<{ incident: BoardIncident; onResolve?: () => void }>
             {incident.resolved ? 'Resolved' : 'Unresolved'}
           </Badge>
           <CrashTypeBadge kind={incident} />
+          <CaseBadge value={incident.case} />
           <span className="text-xs text-slate-700">{incident.location}</span>
         </div>
         <p className="text-sm text-slate-600">
@@ -94,10 +109,12 @@ const IncidentRow: React.FC<{ incident: BoardIncident; onResolve?: () => void }>
         </p>
         {incident.resolved && (
           <p className="text-xs text-emerald-700 font-mono">
-            Resolved {formatIst(incident.resolved_at)} by {incident.resolved_by_name ?? 'unknown officer'}
+            {incident.false_alarm ? 'Resolved as false alarm' : 'Resolved'} {formatIst(incident.resolved_at)} by{' '}
+            {incident.resolved_by_name ?? (incident.case?.automatic ? "the owners' answers" : 'unknown officer')}
             {incident.resolution_note ? ` — “${incident.resolution_note}”` : ''}
           </p>
         )}
+        <OwnerAnswers answers={incident.citizen_responses} value={incident.case} onChanged={onChanged} />
       </div>
       <div className="flex flex-wrap gap-2 lg:justify-end flex-shrink-0">
         <Link to={`/authority/evidence/${incident.id}`}>

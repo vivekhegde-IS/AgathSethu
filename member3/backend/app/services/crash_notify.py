@@ -147,16 +147,23 @@ def location_text(message: dict) -> str:
     return where
 
 
-def _incident_key(db, vehicle_ids, now: datetime, window_s: float) -> str | None:
-    """The incident a recent report of any of these vehicles belongs to."""
+def _incident_key(db, vehicle_ids, now: datetime, window_s: float, junction: str | None = None) -> str | None:
+    """The incident a recent report of any of these vehicles belongs to: a
+    re-sent alert or the partner's alert of the SAME crash. A crash of the same
+    car at a DIFFERENT junction is a new crash (its owner is alerted again),
+    even inside the cooldown."""
     ids = [v for v in vehicle_ids if v is not None]
     if not ids:
         return None
     recent = (db.query(CrashReport)
               .filter(CrashReport.vehicle_id.in_(ids),
                       CrashReport.created_at >= now - timedelta(seconds=window_s))
-              .order_by(CrashReport.created_at.desc()).first())
-    return recent.incident_key if recent is not None else None
+              .order_by(CrashReport.created_at.desc()).limit(50).all())
+    for report in recent:
+        seen_at = (report.raw or {}).get("junction_id")
+        if not junction or not seen_at or seen_at == junction:
+            return report.incident_key
+    return None
 
 
 def _notify(db, user: User, kind: str, title: str, message: str, plate_norm: str | None,
@@ -237,7 +244,8 @@ def _handle_crash_alert(db, message: dict, now: datetime) -> dict:
     is_own = status != STATUS_PARTNER
     route = decision_route(message)
     window = settings.CRASH_NOTIFY_COOLDOWN_S
-    incident_key = (_incident_key(db, [vehicle.id, partner.id if partner else None], now, window)
+    incident_key = (_incident_key(db, [vehicle.id, partner.id if partner else None], now, window,
+                                  message.get("junction_id"))
                     or new_incident_key())
     location = location_text(message)
     outbox: list = []

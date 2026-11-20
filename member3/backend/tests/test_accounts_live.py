@@ -276,3 +276,24 @@ def test_pipeline_socket_delivers_crash_to_owner(client, clean, monkeypatch):
             assert "partner" not in e["data"]["report"]
             e = next_event(ws_a)
             assert e["type"] == "notification.created" and e["data"]["sms"]["body"].startswith("Crash detected")
+
+
+def test_new_crash_at_another_junction_alerts_again(clean):
+    """Car A crashes with B at J03, then crashes alone at J01 a minute later:
+    two crashes, two alerts. A re-sent alert at the same junction is merged."""
+    first = crash_notify.handle_crash_alert(
+        alert("A", "COLLISION_EVENT_CONFIRMED_IMU_GPS", partner="B", alert_id="MM-J3", junction_id="J03",
+              decision_route="mutual_shock"), now=T0)
+    resend = crash_notify.handle_crash_alert(alert("A", alert_id="MM-J3b", junction_id="J03"),
+                                             now=T0 + timedelta(seconds=10))
+    solo = crash_notify.handle_crash_alert(alert("A", alert_id="MM-J1", junction_id="J01"),
+                                           now=T0 + timedelta(seconds=67))
+    assert resend["incident_key"] == first["incident_key"] and resend["notified"] is False
+    assert solo["incident_key"] != first["incident_key"] and solo["notified"] is True
+    db = SessionLocal()
+    try:
+        crash_notes = [n for n in notes_of(db, clean["A"]["user_id"]) if n.kind == "crash"]
+        assert len(crash_notes) == 2
+        assert db.query(SmsMessage).filter(SmsMessage.user_id == clean["A"]["user_id"]).count() == 2
+    finally:
+        db.close()

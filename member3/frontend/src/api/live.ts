@@ -63,11 +63,12 @@ export interface CrashResponseView {
   incident_id: string
   incident_ref: string
   ref_kind: 'crash' | 'incident'
-  response: CrashAnswer
+  /** no_answer: the owner did not answer within 30 s (recorded by the server, treated as severe) */
+  response: CrashAnswer | 'no_answer'
   accident_occurred: boolean
   label: string
   note: string | null
-  channel: 'app' | 'web'
+  channel: 'app' | 'web' | 'system'
   responded_at: string | null
   review_status: 'pending' | 'accepted' | 'rejected' | null
   review_note: string | null
@@ -87,9 +88,11 @@ export interface CaseView {
   reason_code: 'all_minor' | 'accident' | 'no_answer' | 'authority' | null
   reason: string | null
   automatic: boolean
+  /** not resolved because of an accident or an unanswered alert */
+  severe?: boolean
   deadline_at: string | null
   decided_at: string | null
-  vehicles: { plate: string; answer: CrashAnswer | null }[]
+  vehicles: { plate: string; answer: CrashAnswer | 'no_answer' | null }[]
 }
 
 export interface CrashReportView {

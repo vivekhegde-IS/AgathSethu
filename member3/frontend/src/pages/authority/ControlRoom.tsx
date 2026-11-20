@@ -43,6 +43,7 @@ const ReviewCard: React.FC<{ item: ReviewView; onDecide: (confirm: boolean, note
         {ev.pair_distance_m != null && <> · distance {Number(ev.pair_distance_m).toFixed(1)} m</>}
         {ev.relative_speed_kmh != null && <> · rel. speed {Number(ev.relative_speed_kmh).toFixed(1)} km/h</>}
         {ev.speed_kmh != null && <> · leaving at {Number(ev.speed_kmh).toFixed(1)} km/h, {Number(ev.distance_from_crash_m ?? 0).toFixed(1)} m away</>}
+        {ev.basis === 'rfid_sighting' && <> · its RFID tag was read at {ev.seen_at_junction ?? 'another junction'} after the crash</>}
         {' · '}{when(item.created_at)}
       </p>
       {pending ? (
@@ -61,11 +62,13 @@ const ANSWER_STYLE: Record<string, string> = {
   accident: 'bg-red-700 text-white',
   not_serious: 'bg-amber-200 text-amber-950',
   false_alarm: 'bg-slate-200 text-slate-900',
+  no_answer: 'bg-red-900 text-white',
 }
 
 const AnswerBadge: React.FC<{ answer: CrashResponseView }> = ({ answer }) => (
   <span className={`px-2 py-0.5 rounded text-xs font-bold ${ANSWER_STYLE[answer.response] ?? ''}`}>
-    {answer.response === 'accident' ? 'Owner: accident' : answer.response === 'not_serious' ? 'Owner: minor' : 'Owner: false alarm'}
+    {answer.response === 'accident' ? 'Owner: accident' : answer.response === 'not_serious' ? 'Owner: minor'
+      : answer.response === 'no_answer' ? 'No answer in 30 s' : 'Owner: false alarm'}
     {answer.review_status && answer.review_status !== 'pending' && ` · ${answer.review_status}`}
   </span>
 )
@@ -79,7 +82,10 @@ const AnswerCard: React.FC<{ item: CrashResponseView; onDecide: (accept: boolean
         <AnswerBadge answer={item} />
         <span className="font-mono text-xs text-slate-600">{item.incident_ref}</span>
         <CaseBadge value={item.case} />
-        <span className="ml-auto text-xs text-slate-600">via {item.channel === 'app' ? 'mobile app' : 'website'} · {when(item.responded_at)}</span>
+        <span className="ml-auto text-xs text-slate-600">
+          {item.channel === 'system' ? 'recorded by the server' : `via ${item.channel === 'app' ? 'mobile app' : 'website'}`}
+          {' · '}{when(item.responded_at)}
+        </span>
       </div>
       <p className="mt-2 text-sm text-slate-900">
         <strong>{item.plate ?? '—'}</strong>{item.letter && <> (car {item.letter})</>} · {item.owner_name}

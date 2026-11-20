@@ -83,7 +83,7 @@ STATUS_TWO_CAR = ("COLLISION_EVENT_CONFIRMED_IMU_GPS", "COLLISION_EVENT_CONFIRME
 STATUS_SINGLE = "COLLISION_EVENT_SINGLE_VEHICLE"
 
 
-def _crash_kind(db: Session, incident: Incident, vehicles) -> dict:
+def _crash_kind(db: Session, incident: Incident, vehicles, sightings=()) -> dict:
     """Two-car / multi-vehicle / single-vehicle, and hit-and-run.
 
     A pair alert (or two crashed vehicles) makes it a multi-vehicle crash; a
@@ -95,7 +95,9 @@ def _crash_kind(db: Session, incident: Incident, vehicles) -> dict:
     statuses = {status for (status,) in db.query(IncidentAlert.status)
                 .filter(IncidentAlert.incident_id == incident.id) if status}
     crashed = {v.plate_norm for v in vehicles if v.role == ROLE_INVOLVED and v.plate_norm}
-    left = {v.plate_norm for v in vehicles if v.role == ROLE_FLED and v.plate_norm}
+    # left the scene: Member 1's escape report (role "fled"), or - when that
+    # message never arrived - the car's tag read at another junction after the crash
+    left = {s["plate_norm"] for s in fleeing_suspects(vehicles, sightings) if s.get("plate_norm")}
     if statuses & set(STATUS_TWO_CAR) or len(crashed) >= 2:
         kind = "two_car" if len(crashed) <= 2 else "multi_vehicle"
     elif crashed and statuses <= {STATUS_SINGLE} and statuses:
@@ -145,7 +147,7 @@ def _incident_summary(db: Session, incident: Incident) -> dict:
         "sighting_count": len(sightings),
         "vision_confirmed": sum(1 for status in statuses if status == "VISION_CONFIRMED"),
         "vision_probable": sum(1 for status in statuses if status == "PROBABLE_MATCH"),
-        **_crash_kind(db, incident, vehicles),
+        **_crash_kind(db, incident, vehicles, sightings),
         **_resolution(db, incident, vehicles),
     }
 

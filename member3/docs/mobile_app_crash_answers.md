@@ -107,6 +107,23 @@ Fields for the app (citizen and officer screens):
 - `/ws/events`: `{"type": "crash.case_updated", "data": {"case": {...}}}` to the authority and the
   owners of that crash, besides `crash.response` / `crash.response_reviewed`.
 
+## Who is alerted, and the 30-second rule
+
+- **Every registered car in a crash** gets its owner a `kind: "crash"` notification (top-level
+  `incident_id` = `CR-...`), an SMS and a `crash.detected` event: the car whose sensors raised
+  the alert ("Crash detected for your vehicle ...") and its `collision_partner` ("Your vehicle
+  ... may have been involved in a crash ..."). The partner text never names the other car or
+  who caused it; the accusation still waits for the authority's review. Both owners can answer
+  at `POST /api/citizen/incidents/{CR-key}/confirm`.
+- Each owner has **30 s from their own alert**. Silent owners get a server-recorded answer
+  `response: "no_answer"` (`channel: "system"`, `accident_occurred: true`) and the case becomes
+  `not_resolved` with `reason_code: "no_answer"` and `severe: true`. The app's own 30 s
+  auto-report `{"accident_occurred": true, "note": "No answer within 30 seconds..."}` is
+  treated the same way (accident -> not resolved, severe). A late answer replaces the
+  `no_answer` but does not undo the flag; the authority decides.
+- `/ws/live-cameras` `crash_alert` messages now carry `incident_id` (the `CR-...` key the
+  owners answer) and `location` (e.g. "Junction 2 (GPS ...)").
+
 ## How the authority side behaves
 
 - Every answer appears live in **Control Room -> Owner answers**, on the crash in

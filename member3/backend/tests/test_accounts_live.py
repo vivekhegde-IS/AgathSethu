@@ -199,10 +199,21 @@ def test_partner_and_hit_and_run_wait_for_review(client, clean):
                                               partner="A", alert_id="MM-2"), now=T0 + timedelta(seconds=1))
         crash_notify.handle_vehicle_state(escape("B"), now=T0 + timedelta(seconds=5))
 
-        types = [next_event(ws_auth)["type"] for _ in range(3)]
+        types = []
+        while len(types) < 3:                       # the "are you safe?" case updates come in between
+            event_type = next_event(ws_auth)["type"]
+            if event_type != "crash.case_updated":
+                types.append(event_type)
         assert types == ["crash.detected", "crash.partner_named", "hit_and_run.detected"]
 
-        # B's owner: nothing pushed. Their next event is an unrelated fine.
+        # B's owner: only the neutral "are you safe?" alert (never the accusation),
+        # then an unrelated fine.
+        e = next_event(ws_b)
+        assert e["type"] == "crash.detected" and "partner" not in e["data"]["report"]
+        e = next_event(ws_b)
+        assert e["type"] == "notification.created"
+        assert e["data"]["notification"]["message"].startswith("Your vehicle MH 12 BR 7814 may have been involved")
+        assert "KA 01" not in e["data"]["notification"]["message"]
         client.post("/api/authority/fines", headers=bearer(authority),
                     json={"vehicle": "B", "amount": 300, "reason": "Parking"})
         assert next_event(ws_b)["type"] == "fine.issued"
@@ -214,9 +225,9 @@ def test_partner_and_hit_and_run_wait_for_review(client, clean):
         assert sorted(n.kind for n in a_notes) == ["crash", "partner"]
         assert all("MH" not in n.message and "7814" not in n.message for n in a_notes)
         assert any(n.message == crash_notify.UNDER_REVIEW_TEXT for n in a_notes)
-        # accused owner (B): no crash / partner / hit-and-run notification, no SMS
-        assert {n.kind for n in notes_of(db, clean["B"]["user_id"])} == {"fine_issued"}
-        assert db.query(SmsMessage).filter(SmsMessage.user_id == clean["B"]["user_id"]).count() == 0
+        # accused owner (B): one neutral crash alert + SMS; no partner / hit-and-run notification
+        assert sorted(n.kind for n in notes_of(db, clean["B"]["user_id"])) == ["crash", "fine_issued"]
+        assert db.query(SmsMessage).filter(SmsMessage.user_id == clean["B"]["user_id"]).count() == 1
         items = db.query(ReviewItem).filter(ReviewItem.accused_vehicle_id == clean["B"]["vehicle_id"]).all()
         assert sorted(i.kind for i in items) == ["hit_and_run", "partner"]
         assert all(i.status == "pending" for i in items)
@@ -230,7 +241,8 @@ def test_partner_and_hit_and_run_wait_for_review(client, clean):
         db.close()
 
     sid_overview = client.get("/api/me/overview", headers=bearer(sid)).json()
-    assert sid_overview["crashes"] == [] and sid_overview["sms"] == []
+    assert len(sid_overview["crashes"]) == 1 and "partner" not in sid_overview["crashes"][0]
+    assert len(sid_overview["sms"]) == 1 and "KA 01" not in sid_overview["sms"][0]["body"]
 
     # authority decisions: owners cannot decide
     assert client.post(f"/api/authority/review/{partner_id}/confirm", headers=bearer(sid)).status_code == 403
@@ -241,7 +253,7 @@ def test_partner_and_hit_and_run_wait_for_review(client, clean):
 
     db = SessionLocal()
     try:
-        b_notes = [n for n in notes_of(db, clean["B"]["user_id"]) if n.kind != "fine_issued"]
+        b_notes = [n for n in notes_of(db, clean["B"]["user_id"]) if n.kind not in ("fine_issued", "crash")]
         assert [n.kind for n in b_notes] == ["partner"]                     # only the confirmed one
         a_texts = " ".join(n.message for n in notes_of(db, clean["A"]["user_id"]))
         assert "MH 12 BR 7814" in a_texts and "no other vehicle was confirmed" in a_texts

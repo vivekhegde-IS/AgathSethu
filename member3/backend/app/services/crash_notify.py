@@ -7,13 +7,17 @@ tools/simulate_events.py all speak the same v1.8 messages):
   crash_alert     handle_crash_alert()
   vehicle_state   handle_vehicle_state()  (escape_confirmed = hit-and-run)
 
-Rules (from the paper)
-  * A crash alert raised by a vehicle's OWN sensors notifies that vehicle's
-    owner at once (SMS-style message + in-app notification), once per
-    vehicle per incident (re-emits inside CRASH_NOTIFY_COOLDOWN_S are merged).
-  * A partner naming (COLLISION_EVENT_CONFIRMED_PARTNER_ASSOCIATION, or the
-    collision_partner of a pair alert) and a hit-and-run are NEVER shown to the
-    accused owner and never become a fine automatically. They wait in
+Rules
+  * Every registered vehicle in a crash gets its owner an "Are you safe?"
+    alert (SMS-style message + in-app notification of kind "crash"), once per
+    owner per incident (re-emits inside CRASH_NOTIFY_COOLDOWN_S are merged):
+    the car whose own sensors raised it, and the car named as its
+    collision_partner (or named by a PARTNER_ASSOCIATION alert). The partner's
+    alert is neutral ("may have been involved") - it never names the other car
+    or says who caused it - so both owners can answer and the two-car rules in
+    crash_response.py apply.
+  * The ACCUSATION (partner naming) and a hit-and-run are still never shown to
+    the accused owner and never become a fine automatically. They wait in
     review_items until the authority confirms or rejects. Meanwhile the struck
     car's owner sees only "Another vehicle may have been involved; under review".
 
@@ -93,7 +97,7 @@ def report_view(db, report: CrashReport, for_authority: bool) -> dict:
     owner = _owner(db, vehicle)
     answer = (db.query(CrashResponse).filter(CrashResponse.user_id == owner.id,
                                              CrashResponse.incident_ref == report.incident_key).one_or_none()
-              if owner is not None and report.source == "own" else None)
+              if owner is not None else None)
     from app.services.crash_response import case_view, response_view   # avoid an import cycle
     view["owner_response"] = response_view(db, answer, for_authority=for_authority)
     view["case"] = case_view(db, report.incident_key)
@@ -242,6 +246,7 @@ def _handle_crash_alert(db, message: dict, now: datetime) -> dict:
     report = (db.query(CrashReport).filter(CrashReport.incident_key == incident_key,
                                            CrashReport.vehicle_id == vehicle.id).one_or_none())
     first_own = False
+    created_now = report is None
     if report is None:
         report = CrashReport(incident_key=incident_key, vehicle_id=vehicle.id,
                              alert_id=str(message.get("alert_id") or "")[:64] or None, status=status,
@@ -260,21 +265,29 @@ def _handle_crash_alert(db, message: dict, now: datetime) -> dict:
         report.partner_vehicle_id = partner.id
 
     if first_own:
-        owner = _owner(db, vehicle)
-        when = now.astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
-        text = (f"Crash detected for your vehicle {plate_display(vehicle)} at {when}, {location}. "
-                f"Are you safe? Emergency: 112.")
-        note = _notify(db, owner, KIND_CRASH, f"Crash detected: {plate_display(vehicle)}", text,
-                       vehicle.plate_number, {"incident_key": incident_key, "marker": "crash",
-                                              "report_id": report.id, "location": location,
-                                              "crash_at": now.isoformat()})
-        sms = send_sms(db, owner, text, notification_id=note.id)
-        result["notified"] = True
-        # owner: their own crash only (no partner); authority: everything
-        outbox.append(("crash.detected", {"report": report_view(db, report, for_authority=False)},
-                       [owner.id], False))
-        outbox.append(("notification.created", {"_note": note, "_sms": sms}, [owner.id], False))
+        if _alert_owner(db, vehicle, report, incident_key, location, now, outbox, neutral=False):
+            result["notified"] = True
         outbox.append(("crash.detected", {"report": report_view(db, report, for_authority=True)}, [], True))
+    elif created_now and not is_own:
+        # this car was named as the partner by another car's alert: ask its owner too
+        if _alert_owner(db, vehicle, report, incident_key, location, now, outbox, neutral=True):
+            result["notified"] = True
+
+    if partner is not None:
+        # the other car of the pair: make it a party of the crash and ask its owner
+        partner_report = (db.query(CrashReport).filter(CrashReport.incident_key == incident_key,
+                                                       CrashReport.vehicle_id == partner.id).one_or_none())
+        if partner_report is None:
+            partner_report = CrashReport(incident_key=incident_key, vehicle_id=partner.id, source="partner",
+                                         partner_vehicle_id=vehicle.id, decision_route=route,
+                                         alert_id=str(message.get("alert_id") or "")[:64] or None,
+                                         status=STATUS_PARTNER,
+                                         timestamp_sim=str(message.get("timestamp_sim") or "")[:32] or None,
+                                         location=location, raw=_slim(message), created_at=now)
+            db.add(partner_report)
+            db.flush()
+        if _alert_owner(db, partner, partner_report, incident_key, location, now, outbox, neutral=True):
+            result["partner_notified"] = True
 
     if partner is not None:
         # accused = the car named as partner; struck = the car whose alert named it
@@ -291,8 +304,37 @@ def _handle_crash_alert(db, message: dict, now: datetime) -> dict:
             _under_review_note(db, struck, incident_key, outbox)
 
     _flush(db, outbox)
+    # start the "are you safe?" clock: unanswered after 30 s -> severe / not resolved
+    from app.services import crash_response   # avoid an import cycle
+    crash_response.refresh_case(db, "crash", incident_key, now)
     result["status"] = "notified" if result["notified"] else "recorded"
     return result
+
+
+def _alert_owner(db, vehicle: Vehicle, report: CrashReport, incident_key: str, location: str,
+                 now: datetime, outbox: list, neutral: bool) -> bool:
+    """The "Are you safe?" alert to this vehicle's owner, once per incident.
+    ``neutral`` (the partner car): never names the other car or a cause."""
+    owner = _owner(db, vehicle)
+    if owner is None or _has_note(db, owner.id, KIND_CRASH, incident_key, "crash"):
+        return False
+    when = now.astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+    plate = plate_display(vehicle)
+    if neutral:
+        title = f"Possible crash: {plate}"
+        text = (f"Your vehicle {plate} may have been involved in a crash at {when}, {location}. "
+                f"Are you safe? Emergency: 112.")
+    else:
+        title = f"Crash detected: {plate}"
+        text = f"Crash detected for your vehicle {plate} at {when}, {location}. Are you safe? Emergency: 112."
+    note = _notify(db, owner, KIND_CRASH, title, text, vehicle.plate_number,
+                   {"incident_key": incident_key, "marker": "crash", "report_id": report.id,
+                    "location": location, "crash_at": now.isoformat()})
+    sms = send_sms(db, owner, text, notification_id=note.id)
+    # the owner's own view: their vehicle only, never the partner
+    outbox.append(("crash.detected", {"report": report_view(db, report, for_authority=False)}, [owner.id], False))
+    outbox.append(("notification.created", {"_note": note, "_sms": sms}, [owner.id], False))
+    return True
 
 
 def _slim(message: dict) -> dict:
@@ -343,7 +385,11 @@ def _handle_escape(db, message: dict, now: datetime) -> dict:
                               "speed_kmh": message.get("speed_kmh"),
                               "distance_from_crash_m": message.get("distance_from_crash_m"),
                               "timestamp_sim": message.get("timestamp_sim"),
-                              "state": message.get("state")})
+                              "state": message.get("state"),
+                              # "rfid_sighting": its tag was read at another junction after the crash
+                              # (used when Member 1's escape report did not arrive)
+                              "basis": message.get("basis") or "escape_confirmed",
+                              "seen_at_junction": message.get("junction_id")})
     outbox: list = []
     if item is not None:
         outbox.append(("hit_and_run.detected", {"review": review_view(db, item)}, [], True))

@@ -2168,6 +2168,14 @@ class LiveEvidencePublisher:
                 except Exception:
                     pass
                 self.ws = None
+                # Reliable evidence (the escape vehicle_state, RFID reads) must
+                # survive an uplink drop: put it back so it is sent after the
+                # reconnect instead of being lost. Camera/IMU frames are not
+                # worth resending (newer ones replace them).
+                if (source_q is self.reliable_q and not self.stop_event.is_set()
+                        and not getattr(self, "_reliable_give_up", False)):
+                    self.reliable_q.put(msg)
+                    time.sleep(0.5)
             finally:
                 source_q.task_done()
 
@@ -2300,6 +2308,12 @@ class LiveEvidencePublisher:
         # Drain everything that was already accepted by the transport queues,
         # then stop the worker. No camera queue is allowed to be abandoned.
         try:
+            # Reliable messages are retried while the uplink is down; give them
+            # a bounded window, then stop retrying so shutdown cannot hang.
+            deadline = time.monotonic() + ALERT_CLOSE_GRACE_S
+            while self.reliable_q.unfinished_tasks and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self._reliable_give_up = True
             self.reliable_q.join()
             self.q.join()
             for q in self.camera_queues.values():

@@ -44,7 +44,8 @@ def fresh(clean, monkeypatch):
     return clean
 
 
-def crash(letter, alert_id="MM-RESP-1", partner=None, now=T0):
+def crash(letter, alert_id="MM-RESP-1", partner=None, now=None):
+    now = now or datetime.now(timezone.utc)      # each owner's 30 s clock starts at their alert
     car = FLEET[letter]
     message = {"type": "crash_alert", "alert_id": alert_id, "vehicle_id": letter, "plate_number": car.plate,
                "epc": car.epc, "status": "COLLISION_EVENT_SINGLE_VEHICLE", "crash_probability": 0.97,
@@ -125,6 +126,21 @@ def test_single_vehicle_accident_is_not_resolved_and_reopens(client, fresh):
 
 
 # ── two vehicles ─────────────────────────────────────────────────────────────────
+def test_two_car_crash_alerts_both_owners_and_both_can_answer(client, fresh):
+    key = crash("A", alert_id="MM-PAIR-ONLY-A", partner="B")      # B's own sensors stay silent
+    for letter in ("A", "B"):
+        token = login(client, OWNER[letter])
+        notes = client.get("/api/citizen/notifications", headers=bearer(token)).json()["notifications"]
+        crash_note = next(n for n in notes if n["kind"] == "crash")
+        assert crash_note["incident_id"] == key and crash_note["data"]["marker"] == "crash"
+    b_text = next(n for n in client.get("/api/citizen/notifications", headers=bearer(login(client, "siddharth.kulkarni")))
+                  .json()["notifications"] if n["kind"] == "crash")["message"]
+    assert "may have been involved" in b_text and "KA 01" not in b_text      # neutral: no other plate, no blame
+    answer(client, "A", key, {"response": "not_serious"})
+    answer(client, "B", key, {"accident_occurred": False})
+    assert case(key)["outcome"] == "resolved"
+
+
 def test_two_vehicles_both_minor_resolves(client, fresh):
     key = two_car_crash()
     answer(client, "A", key, {"response": "not_serious"})
@@ -151,8 +167,11 @@ def test_two_vehicles_partner_silent_30s_is_not_resolved_then_authority_resolves
         assert crash_response.case_view(db, key)["outcome"] == "waiting"           # still inside 30 s
         crash_response.sweep_overdue(db, now=datetime.now(timezone.utc) + timedelta(seconds=31))
         c = crash_response.case_view(db, key)
-        assert c["outcome"] == "not_resolved" and c["reason_code"] == "no_answer"
+        assert c["outcome"] == "not_resolved" and c["reason_code"] == "no_answer" and c["severe"] is True
         assert "MH 12 BR 7814" in c["reason"]
+        silent = db.query(CrashResponse).filter(CrashResponse.incident_ref == key,
+                                                CrashResponse.user_id == fresh["B"]["user_id"]).one()
+        assert silent.response == "no_answer"                                  # recorded as severe
     finally:
         db.close()
     answer(client, "B", key, {"response": "not_serious"})                     # too late: stays flagged
@@ -224,3 +243,34 @@ def test_incident_with_unanswerable_partner_needs_the_authority(client, incident
         assert db.get(Incident, incident).status == "under_investigation"
     finally:
         db.close()
+
+
+def test_nobody_answers_single_vehicle_is_severe(client, fresh):
+    key = crash("A")
+    db = SessionLocal()
+    try:
+        crash_response.sweep_overdue(db, now=datetime.now(timezone.utc) + timedelta(seconds=31))
+        c = crash_response.case_view(db, key)
+        assert c["outcome"] == "not_resolved" and c["severe"] is True and c["vehicles"][0]["answer"] == "no_answer"
+    finally:
+        db.close()
+    authority = login(client, "authority.admin")
+    answers = client.get("/api/authority/live", headers=bearer(authority)).json()["responses"]
+    assert any(a["incident_ref"] == key and a["response"] == "no_answer" for a in answers)
+
+
+def test_live_viewer_crash_alert_carries_incident_id(client, fresh, monkeypatch):
+    monkeypatch.setenv("RFID_ENABLED", "0")
+    token = login(client, "authority.admin")
+    with client.websocket_connect(f"/ws/live-cameras?token={token}") as viewer:
+        with client.websocket_connect("/ws/carla/cameras") as carla:
+            car = FLEET["C"]
+            carla.send_json({"type": "crash_alert", "alert_id": "MM-VIEW-1", "vehicle_id": "C",
+                             "plate_number": car.plate, "epc": car.epc,
+                             "status": "COLLISION_EVENT_SINGLE_VEHICLE", "timestamp_sim": 9.0, "junction_id": "J02"})
+            assert carla.receive_json()["type"] == "crash_alert_ack"
+        for _ in range(50):
+            message = viewer.receive_json()
+            if message.get("type") == "crash_alert" and message.get("alert_id") == "MM-VIEW-1":
+                break
+        assert message["incident_id"].startswith("CR-") and message["location"].startswith("Junction 2")

@@ -122,7 +122,7 @@ CARLA_JUNCTION_LOCATIONS = {
 }
 
 
-async def _crash_notify(name: str, message: dict) -> None:
+async def _crash_notify(name: str, message: dict) -> dict | None:
     """Owner crash notifications / review queue (services/crash_notify.py), in a
     worker thread so DB work never blocks this socket. Never raises."""
     try:
@@ -130,8 +130,10 @@ async def _crash_notify(name: str, message: dict) -> None:
 
         result = await asyncio.to_thread(getattr(crash_notify, name), dict(message))
         print(f"[CRASH NOTIFY] {name}: {result}", flush=True)
+        return result
     except Exception as error:
         print(f"[CRASH NOTIFY] {name} failed: {error}", flush=True)
+        return None
 
 
 def _utc_now_iso() -> str:
@@ -447,6 +449,15 @@ async def carla_camera_ingestion(websocket: WebSocket):
                 # with real-world timing, separate from the sim timestamp.
                 message["received_at"] = _utc_now_iso()
 
+                # Owners' "are you safe?" alerts first (a few ms of DB work), so
+                # the viewers' alert carries the crash it was grouped into:
+                # incident_id = the CR-... key the owners answer, plus location.
+                notified = await _crash_notify("handle_crash_alert", message)
+                if notified and notified.get("incident_key"):
+                    from app.services.crash_notify import location_text
+                    message["incident_id"] = notified["incident_key"]
+                    message["location"] = location_text(message)
+
                 # Buffer for viewers that connect/reconnect after the crash.
                 remember_crash_alert(message)
 
@@ -478,8 +489,6 @@ async def carla_camera_ingestion(websocket: WebSocket):
                 # incident and start the crash-zone snapshot. All DB work is
                 # queued, so this is cheap, but it can never delay the ack.
                 _rfid_call("on_crash_alert", message)
-                # Owner text message + authority review queue (after the ack)
-                await _crash_notify("handle_crash_alert", message)
 
     except WebSocketDisconnect:
         print("[CARLA WS] Member 1 camera connection disconnected")

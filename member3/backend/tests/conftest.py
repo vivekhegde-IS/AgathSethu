@@ -134,3 +134,14 @@ def open_events(client, token: str):
             return self._cm.__exit__(*exc)
 
     return _Socket()
+
+
+@pytest.fixture(autouse=True)
+def _no_case_timers(monkeypatch):
+    """The crash case's 30 s check runs on a timer thread in production; tests
+    drive it with crash_response.sweep_overdue(now=...) instead."""
+    try:
+        from app.services import crash_response
+    except Exception:          # module import needs app settings; skip when unavailable
+        return
+    monkeypatch.setattr(crash_response, "_schedule", lambda *a, **k: None)

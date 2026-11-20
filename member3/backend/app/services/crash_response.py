@@ -12,9 +12,9 @@ with {"accident_occurred": bool} (the app's original shape) or
   * <uuid>         an incidents.id (RFID / camera incident pipeline)
 
 Who may answer
-  Only the owner of a vehicle the crash was raised for. A car that was merely
-  NAMED as a partner cannot answer (that stays with the review queue, see
-  crash_notify.py), so the endpoint never leaks a partner naming.
+  The owner of any vehicle the crash was raised for: the car whose sensors
+  raised it and the car named as its partner (both get the "are you safe?"
+  alert, see crash_notify.py). The accusation itself stays in the review queue.
 
 Case outcome (crash_case_outcomes), re-evaluated on every answer
   "minor" = not_serious or false_alarm ("no need to involve the authority").
@@ -22,12 +22,12 @@ Case outcome (crash_case_outcomes), re-evaluated on every answer
       (single-vehicle crash: that one owner; two-vehicle crash: both owners).
       An incidents row is set to status "resolved".
   * Any owner answered "accident"                  -> NOT RESOLVED
-  * Some owners answered minor, another has not answered within
-    CRASH_PARTNER_ANSWER_WINDOW_S (30 s) of the first minor answer
-                                                   -> NOT RESOLVED (stays so)
+  * An owner has not answered within CRASH_PARTNER_ANSWER_WINDOW_S (30 s)
+    of their alert: their answer is recorded as "no_answer" (severe), like
+    the app's own 30 s auto-report as an accident  -> NOT RESOLVED (stays so)
   * Otherwise                                      -> WAITING
-  A vehicle whose owner cannot answer (unregistered, or only named as a
-  partner) never answers, so such a crash is never auto-resolved.
+  A vehicle whose owner cannot answer (unregistered) never answers, so such
+  a crash is never auto-resolved.
   NOT RESOLVED cases keep the minor answers "pending": the authority accepts
   (resolve: false alarm -> false_positive) or rejects them by hand.
   Changing an answer to "accident" later reopens an auto-resolved case.
@@ -56,9 +56,11 @@ log = logging.getLogger(__name__)
 
 RESPONSES = ("accident", "not_serious", "false_alarm")
 MINOR = ("not_serious", "false_alarm")
+RESPONSES_SEVERE = ("accident", "no_answer")
 RESPONSE_LABELS = {"accident": "Accident confirmed by owner",
                    "not_serious": "Owner reports: minor, not serious",
-                   "false_alarm": "Owner reports: false alarm"}
+                   "false_alarm": "Owner reports: false alarm",
+                   "no_answer": "No answer within 30 s (treated as severe)"}
 KIND_REVIEW_OUTCOME = "review_outcome"     # no "crash" in the name: the app raises its alarm on those
 _CRASH_KEY = re.compile(r"^CR-[0-9A-F]{10}$")
 _case_lock = threading.Lock()              # one evaluation of a case at a time (answers + timer)
@@ -86,7 +88,7 @@ def owned_vehicle(db: Session, user: User, kind: str, ref: str) -> Vehicle | Non
         return None
     if kind == "crash":
         report = (db.query(CrashReport)
-                  .filter(CrashReport.incident_key == ref, CrashReport.source == "own",
+                  .filter(CrashReport.incident_key == ref,
                           CrashReport.vehicle_id.in_([v.id for v in vehicles]))
                   .order_by(CrashReport.created_at).first())
         return next((v for v in vehicles if report is not None and v.id == report.vehicle_id), None)
@@ -145,6 +147,7 @@ def case_view(db: Session, ref: str) -> dict | None:
     answers = _answers(db, ref)
     return {"incident_ref": ref, "outcome": row.outcome, "reason_code": row.reason_code, "reason": row.reason,
             "automatic": row.decided_by is None, "deadline_at": _iso(row.deadline_at),
+            "severe": row.outcome == "not_resolved" and row.reason_code in RESPONSES_SEVERE,
             "decided_at": _iso(row.decided_at),
             "vehicles": [{"plate": _display(p), "answer": answers[p].response if p in answers else None}
                          for p in sorted(parties)]}
@@ -153,11 +156,27 @@ def case_view(db: Session, ref: str) -> dict | None:
 # ── case evaluation ──────────────────────────────────────────────────────────────
 def _parties(db: Session, kind: str, ref: str) -> set[str]:
     """Plates of every vehicle involved in this crash."""
+    return set(_party_alerts(db, kind, ref))
+
+
+def _party_alerts(db: Session, kind: str, ref: str) -> dict[str, tuple[Vehicle | None, datetime | None]]:
+    """plate -> (registered vehicle or None, when its owner was alerted)."""
+    out: dict[str, tuple[Vehicle | None, datetime | None]] = {}
     if kind == "crash":
-        ids = {vid for (vid,) in db.query(CrashReport.vehicle_id).filter(CrashReport.incident_key == ref)}
-        return {v.plate_number for v in db.query(Vehicle).filter(Vehicle.id.in_(ids))} if ids else set()
-    return {p for (p,) in db.query(IncidentVehicle.plate_norm)
-            .filter(IncidentVehicle.incident_id == ref, IncidentVehicle.role == "involved") if p}
+        for report in db.query(CrashReport).filter(CrashReport.incident_key == ref).order_by(CrashReport.created_at):
+            vehicle = db.get(Vehicle, report.vehicle_id)
+            if vehicle is not None and vehicle.plate_number not in out:
+                out[vehicle.plate_number] = (vehicle, report.created_at)
+        return out
+    incident = db.get(Incident, ref)
+    alerted = incident.created_at if incident is not None else None
+    for (plate,) in db.query(IncidentVehicle.plate_norm).filter(IncidentVehicle.incident_id == ref,
+                                                                IncidentVehicle.role == "involved"):
+        if plate and plate not in out:
+            vehicle = (db.query(Vehicle).filter(Vehicle.plate_number == plate, Vehicle.is_active.is_(True))
+                       .first())
+            out[plate] = (vehicle, alerted)
+    return out
 
 
 def _answers(db: Session, ref: str) -> dict[str, CrashResponse]:
@@ -207,22 +226,41 @@ def _reopen(db: Session, kind: str, ref: str, answers: dict) -> None:
 
 
 def _evaluate(db: Session, kind: str, ref: str, now: datetime, outbox: list) -> CrashCaseOutcome | None:
-    parties = _parties(db, kind, ref)
-    answers = _answers(db, ref)
-    if not parties or not answers:
+    parties = _party_alerts(db, kind, ref)
+    if not parties:
         return db.get(CrashCaseOutcome, ref)
+    answers = _answers(db, ref)
     row = db.get(CrashCaseOutcome, ref)
     if row is None:
         row = CrashCaseOutcome(incident_ref=ref, ref_kind=kind, outcome="waiting")
         db.add(row)
     previous = row.outcome
-    accident = sorted(p for p, a in answers.items() if a.response == "accident")
+    window = timedelta(seconds=settings.CRASH_PARTNER_ANSWER_WINDOW_S)
+
+    def due(plate: str) -> datetime | None:
+        alerted = parties[plate][1]
+        return alerted + window if alerted is not None else None
+
+    # An owner who has not answered 30 s after their alert: recorded as "no_answer"
+    for plate, (vehicle, _alerted) in parties.items():
+        deadline = due(plate)
+        if plate in answers or deadline is None or now < deadline:
+            continue
+        if vehicle is not None and vehicle.owner_id is not None:
+            answers[plate] = CrashResponse(user_id=vehicle.owner_id, vehicle_id=vehicle.id, incident_ref=ref,
+                                           ref_kind=kind, response="no_answer", channel="system",
+                                           responded_at=now, review_status=None)
+            db.add(answers[plate])
     minor = [a for a in answers.values() if a.response in MINOR]
-    missing = sorted(p for p in parties if p not in answers)
-    window = settings.CRASH_PARTNER_ANSWER_WINDOW_S
     if minor and row.first_answer_at is None:
         row.first_answer_at = min(a.responded_at for a in minor)
-        row.deadline_at = row.first_answer_at + timedelta(seconds=window)
+
+    accident = sorted(p for p, a in answers.items() if a.response == "accident")
+    missing = sorted(p for p in parties if p not in answers)
+    silent = sorted([p for p, a in answers.items() if a.response == "no_answer"]
+                    + [p for p in missing if due(p) is not None and now >= due(p)])     # unregistered cars
+    pending = [p for p in missing if p not in silent]
+    row.deadline_at = min((due(p) for p in pending if due(p) is not None), default=None)
 
     if accident:
         outcome, code = "not_resolved", "accident"
@@ -231,14 +269,14 @@ def _evaluate(db: Session, kind: str, ref: str, now: datetime, outbox: list) -> 
         return row                          # the authority decided; only an accident reopens it
     elif row.outcome == "not_resolved" and row.reason_code == "no_answer":
         return row                          # a late answer does not undo the flag
+    elif silent:
+        outcome, code = "not_resolved", "no_answer"
+        reason = (f"No answer from the owner of {', '.join(_display(p) for p in silent)} "
+                  f"within {int(window.total_seconds())} s: treated as severe.")
     elif not missing:
         outcome, code = "resolved", "all_minor"
         reason = ("The owner reported a minor crash / no need for the authority." if len(parties) == 1 else
                   f"All {len(parties)} involved owners reported a minor crash / no need for the authority.")
-    elif row.deadline_at is not None and now >= row.deadline_at:
-        outcome, code = "not_resolved", "no_answer"
-        reason = (f"No answer from the owner of {', '.join(_display(p) for p in missing)} "
-                  f"within {int(window)} s.")
     else:
         outcome, code = "waiting", None
         reason = f"Waiting for the owner of {', '.join(_display(p) for p in missing)} to answer."
@@ -252,6 +290,10 @@ def _evaluate(db: Session, kind: str, ref: str, now: datetime, outbox: list) -> 
         _resolve(db, kind, ref, answers, now, reason, None, outbox)
     elif outcome != "resolved" and previous == "resolved":
         _reopen(db, kind, ref, answers)
+    if outcome == "not_resolved" and code in RESPONSES_SEVERE and kind == "incident":
+        incident = db.get(Incident, ref)
+        if incident is not None and incident.status not in ("resolved", "false_positive"):
+            incident.severity = "critical"
     outbox.append(("case", ref))
     return row
 

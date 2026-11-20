@@ -462,12 +462,16 @@ class RfidCrossVerification:
         self._emit(EVENT_SUSPECT, {
             "incident_id": incident.incident_id, "plate_norm": vehicle.plate_norm,
             "epc": vehicle.epc, "suspect_vehicle_id": vehicle.sim_vehicle_id,
-            "basis": "escape_confirmed", **{k: escape[k] for k in
+            "basis": escape.get("basis", "escape_confirmed"), **{k: escape.get(k) for k in
                                             ("timestamp_sim", "distance_from_crash_m", "speed_kmh")},
         })
-        self._log_stage(f"fleeing suspect {vehicle.sim_vehicle_id} ({vehicle.plate_norm}): "
-                        f"{escape['distance_from_crash_m']} m from the crash at "
-                        f"{escape['speed_kmh']} km/h")
+        if escape.get("basis") == "rfid_sighting":
+            self._log_stage(f"fleeing suspect {vehicle.sim_vehicle_id} ({vehicle.plate_norm}): "
+                            f"tag read at {escape.get('junction_id')} after the crash (no escape report)")
+        else:
+            self._log_stage(f"fleeing suspect {vehicle.sim_vehicle_id} ({vehicle.plate_norm}): "
+                            f"{escape['distance_from_crash_m']} m from the crash at "
+                            f"{escape['speed_kmh']} km/h")
 
     def note_disconnect(self) -> None:
         """A connection dropped. It only starts a new run if configured to."""
@@ -598,6 +602,27 @@ class RfidCrossVerification:
                     "version": 0, "final": False, "status": STATUS_AWAITING_VISION,
                 })
                 self._log_stage(f"watchlist hit {sighting.epc} at {sighting.junction_id}")
+                self._escape_from_sighting(incident, sighting)
+
+    def _escape_from_sighting(self, incident, sighting) -> None:
+        """A crashed car's tag read at ANOTHER junction AFTER the crash means it
+        left the scene. Member 1's escape report normally says so first; when
+        that message was lost (e.g. the CARLA uplink dropped), this sighting
+        marks the car as fled instead, and raises the hit-and-run review."""
+        vehicle = next((v for v in incident.vehicles if v.epc and v.epc == sighting.epc), None)
+        if vehicle is None or not vehicle.plate_norm or vehicle.plate_norm in incident.fled:
+            return
+        escape = {"vehicle_id": vehicle.sim_vehicle_id, "plate_norm": vehicle.plate_norm, "epc": vehicle.epc,
+                  "timestamp_sim": sighting.first_seen_ts, "distance_from_crash_m": None, "speed_kmh": None,
+                  "basis": "rfid_sighting", "junction_id": sighting.junction_id}
+        incident.fled[vehicle.plate_norm] = {**escape, "sim_vehicle_id": vehicle.sim_vehicle_id}
+        self._announce_suspect(incident, vehicle, escape)
+        # hit-and-run review in the control room (crash_notify), off this thread
+        message = {"type": "vehicle_state", "vehicle_id": vehicle.sim_vehicle_id, "plate_number": vehicle.plate_norm,
+                   "epc": vehicle.epc, "state": "SEEN_AT_ANOTHER_JUNCTION", "escape_confirmed": True,
+                   "timestamp_sim": sighting.first_seen_ts, "junction_id": sighting.junction_id,
+                   "basis": "rfid_sighting"}
+        threading.Thread(target=_notify_escape, args=(message,), name="rfid-escape-notify", daemon=True).start()
 
     def _sighting_header(self, incident, sighting) -> dict:
         return {
@@ -1496,3 +1521,12 @@ def set_service(service: RfidCrossVerification | None) -> None:
 def notify_disconnect() -> None:
     if _singleton is not None:
         _singleton.note_disconnect()
+
+
+def _notify_escape(message: dict) -> None:
+    """RFID-detected escape -> the control room's hit-and-run review queue."""
+    try:
+        from app.services.crash_notify import handle_vehicle_state
+        handle_vehicle_state(message)
+    except Exception as exc:                       # never break the RFID worker
+        log.warning("escape notify failed: %s", exc)

@@ -60,8 +60,7 @@ def my_overview(response: Response, user: User = Depends(require_citizen), db: S
     sms = (db.query(SmsMessage).filter(SmsMessage.user_id == user.id)
            .order_by(SmsMessage.created_at.desc()).limit(100).all())
     reports = (db.query(CrashReport)
-               .filter(CrashReport.vehicle_id.in_([v.id for v in vehicles]) if vehicles else false(),
-                       CrashReport.source == "own")
+               .filter(CrashReport.vehicle_id.in_([v.id for v in vehicles]) if vehicles else false())
                .order_by(CrashReport.created_at.desc()).limit(50).all())
     return {
         "user": {"id": str(user.id), "username": user.username, "full_name": user.full_name,

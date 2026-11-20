@@ -31,14 +31,20 @@ export function caseLabel(c: CaseView): string {
 
 export const CaseBadge: React.FC<{ value?: CaseView | null }> = ({ value }) =>
   value ? (
-    <span title={value.reason ?? undefined}
-          className={`inline-flex px-2 py-0.5 rounded border text-xs font-semibold ${OUTCOME_STYLE[value.outcome]}`}>
-      {caseLabel(value)}
-    </span>
+    <>
+      <span title={value.reason ?? undefined}
+            className={`inline-flex px-2 py-0.5 rounded border text-xs font-semibold ${OUTCOME_STYLE[value.outcome]}`}>
+        {caseLabel(value)}
+      </span>
+      {value.severe && (
+        <span className="inline-flex ml-1 px-2 py-0.5 rounded bg-red-700 text-white text-xs font-bold">SEVERE</span>
+      )}
+    </>
   ) : null
 
 const ANSWER_TEXT: Record<string, string> = {
   accident: 'Accident', not_serious: 'Minor, not serious', false_alarm: 'False alarm / no authority needed',
+  no_answer: 'No answer within 30 s (severe)',
 }
 
 export const OwnerAnswers: React.FC<{
@@ -75,10 +81,13 @@ export const OwnerAnswers: React.FC<{
           <li key={a.id} className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-mono font-semibold">{a.plate ?? '—'}</span>
             <span className="text-slate-700">{a.owner_name}</span>
-            <span className={a.response === 'accident' ? 'text-red-700 font-semibold' : 'text-slate-900'}>
+            <span className={a.response === 'accident' || a.response === 'no_answer'
+              ? 'text-red-700 font-semibold' : 'text-slate-900'}>
               {ANSWER_TEXT[a.response] ?? a.label}
             </span>
-            <span className="text-xs text-slate-500">via {a.channel === 'app' ? 'app' : 'website'}</span>
+            <span className="text-xs text-slate-500">
+              {a.channel === 'system' ? 'recorded by the server' : `via ${a.channel === 'app' ? 'app' : 'website'}`}
+            </span>
             {a.review_status === 'pending' && (
               <span className="ml-auto flex gap-2">
                 <button type="button" disabled={busy !== null} onClick={() => decide(a, true)}

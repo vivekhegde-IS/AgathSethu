@@ -2,13 +2,16 @@ import React from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { CitizenLiveBridge, NotificationBell } from '@components/live/CrashAnswer'
 
 export const CitizenLayout: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900">
       <Sidebar portal="citizen" />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar portal="citizen" />
+        <Topbar portal="citizen" extra={<NotificationBell />} />
+        {/* live: crash "are you safe?" pop-up + toasts, on every citizen page */}
+        <CitizenLiveBridge />
         <main className="flex-1 p-6 max-w-7xl w-full mx-auto overflow-y-auto">
           <Outlet />
         </main>

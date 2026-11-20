@@ -47,6 +47,11 @@ import { TrackingDashboard } from '@pages/authority/Tracking'
 import { JunctionDetailPage } from '@pages/authority/JunctionDetail'
 import { EvidenceManager } from '@pages/authority/Evidence'
 import { IncidentEvidencePage } from '@pages/authority/IncidentEvidence'
+import { ControlRoom } from '@pages/authority/ControlRoom'
+
+// ─── Live dashboards ───────────────────────────────────────────────────────────
+import { OwnerLive } from '@pages/me/OwnerLive'
+import { GoogleDone } from '@pages/public/GoogleDone'
 
 /** Old incident links (/authority/incident-evidence/:id) open the detail page. */
 function LegacyIncidentRedirect() {
@@ -90,6 +95,7 @@ export default function App() {
             <Route path="/terms" element={<InfoPage page="terms" />} />
             <Route path="/accessibility" element={<InfoPage page="accessibility" />} />
             <Route path="/help" element={<InfoPage page="help" />} />
+            <Route path="/auth/google/done" element={<GoogleDone />} />
             {/* ── CATCH-ALL: unknown URLs get a "Page not found" page ── */}
             <Route path="*" element={<NotFound />} />
           </Route>
@@ -118,6 +124,18 @@ export default function App() {
           </Route>
 
 
+          {/* ── /me: the logged-in vehicle owner's live page (owners only) ── */}
+          <Route
+            path="/me"
+            element={
+              <ProtectedRoute roles={['citizen']}>
+                <CitizenLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<OwnerLive />} />
+          </Route>
+
           {/* ── AUTHORITY TACTICAL TOC ── */}
           <Route
             path="/authority"
@@ -127,7 +145,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/authority/dashboard" replace />} />
+            {/* /authority itself: live control room (fines, crash alerts, review queue) */}
+            <Route index element={<ControlRoom />} />
             <Route path="dashboard" element={<AuthorityDashboard />} />
             <Route path="level1" element={<Level1Dashboard />} />
             <Route path="violations/:violationId" element={<AuthorityViolationDetail />} />

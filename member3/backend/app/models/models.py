@@ -54,6 +54,12 @@ class User(Base):
     jurisdiction = Column(String(255), nullable=True)
     # Set when the welcome email for the first login was sent (see welcome_email.py)
     welcome_email_sent_at = Column(DateTime(timezone=True), nullable=True)
+    # Demo login name (seeded owners + authority, migration 009); email still works
+    username = Column(String(64), unique=True, nullable=True)
+    # Sign in with Google (vehicle owners only): matched on Google's stable `sub`
+    google_sub = Column(String(255), unique=True, nullable=True)
+    google_email = Column(String(255), nullable=True)
+    google_linked_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -79,6 +85,11 @@ class Vehicle(Base):
     fastag_id = Column(String(100), nullable=True)
     registered_state = Column(String(10), nullable=True, default="KA")
     is_active = Column(Boolean, default=True)
+    # Simulated CARLA fleet (migration 009; see app/core/fleet.py)
+    carla_letter = Column(String(1), unique=True, nullable=True)
+    carla_role_name = Column(String(64), nullable=True)
+    rfid_epc = Column(String(64), unique=True, nullable=True)
+    state_name = Column(String(64), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships

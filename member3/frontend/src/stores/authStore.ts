@@ -52,6 +52,8 @@ interface AuthState {
 
   /** Resolves to the logged-in user, or null on failure (error is set). */
   loginWithCredentials: (email: string, password: string) => Promise<User | null>
+  /** Google sign-in hands back the same token response as password login. */
+  setSession: (accessToken: string, apiUser: UserResponse) => User
   registerCitizen: (data: CitizenRegisterRequest) => Promise<{ success: boolean; message: string }>
   registerAuthority: (data: AuthorityRegisterRequest) => Promise<{ success: boolean; message: string }>
   initializeAuth: () => Promise<void>
@@ -106,6 +108,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  setSession: (accessToken: string, apiUser: UserResponse) => {
+    saveToken(accessToken)
+    const user = mapApiUser(apiUser)
+    set({ user, token: accessToken, isAuthenticated: true, isLoading: false, error: null })
+    return user
+  },
+
   // ── Citizen registration ───────────────────────────────────────────────────────
   registerCitizen: async (data: CitizenRegisterRequest) => {
     set({ isLoading: true, error: null })
@@ -146,7 +155,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     try {
-      // Validate token with the backend — don't trust localStorage alone
+      // Validate token with the backend — don't trust browser storage alone
       const apiUser = await getMeApi()
       set({
         user: mapApiUser(apiUser),

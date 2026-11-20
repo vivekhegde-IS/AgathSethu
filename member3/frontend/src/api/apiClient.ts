@@ -3,8 +3,15 @@
  *
  * Base URL: VITE_API_BASE_URL (e.g., http://localhost:8001/api)
  *
- * Attaches JWT from localStorage to every authenticated request.
- * Uses a plain localStorage read — no import from authStore —
+ * Attaches the JWT to every authenticated request as a Bearer header.
+ *
+ * PER-TAB SESSIONS: the token lives in sessionStorage, which every browser tab
+ * has its own copy of. So /authority (authority login) and /me (an owner
+ * login) can be open side by side in the same browser without one login
+ * replacing the other - a shared cookie or localStorage would. The same token
+ * authenticates the /ws/events socket. A new tab starts logged out.
+ *
+ * Uses a plain sessionStorage read — no import from authStore —
  * to avoid circular dependency: apiClient ↔ authStore ↔ auth API.
  *
  * On 401: dispatches a custom window event so authStore can react
@@ -14,6 +21,13 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 const TOKEN_KEY = 'aghat_access_token'
+
+// Older builds kept the token in localStorage (shared by all tabs): drop it.
+try {
+  localStorage.removeItem(TOKEN_KEY)
+} catch {
+  /* storage unavailable */
+}
 
 // ── Create Axios instance ───────────────────────────────────────────────────────
 const apiClient: AxiosInstance = axios.create({
@@ -27,7 +41,7 @@ const apiClient: AxiosInstance = axios.create({
 // ── Request interceptor — attach JWT ────────────────────────────────────────────
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem(TOKEN_KEY)
+    const token = getToken()
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -50,15 +64,26 @@ apiClient.interceptors.response.use(
 
 // ── Token helpers ────────────────────────────────────────────────────────────────
 export function saveToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token)
+  sessionStorage.setItem(TOKEN_KEY, token)
 }
 
 export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  try {
+    return sessionStorage.getItem(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+/** ws(s)://host[:port]/ws/events, derived from the API base URL. */
+export function getEventsSocketUrl(): string {
+  const api = new URL(getApiBaseUrl(), window.location.href)
+  const protocol = api.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${api.host}/ws/events`
 }
 
 export function getApiBaseUrl(): string {

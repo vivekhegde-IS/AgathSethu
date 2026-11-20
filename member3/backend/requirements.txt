@@ -28,5 +28,9 @@ python-multipart==0.0.12
 # HTTP utils
 httpx==0.27.2
 
+# Sign in with Google: ID-token verification (google.oauth2.id_token)
+google-auth==2.35.0
+requests>=2.31  # google-auth HTTP transport (Google certificate fetch)
+
 # NETRA shadow association (app/services/rfid/netra; only imported when RFID_NETRA_ENABLED=1)
 scipy>=1.11

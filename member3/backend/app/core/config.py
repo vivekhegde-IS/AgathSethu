@@ -67,6 +67,27 @@ class Settings(BaseSettings):
     # JSON list of RTCIceServer dicts handed to browsers
     WEBRTC_ICE_SERVERS: str = '[{"urls": ["stun:stun.l.google.com:19302"]}]'
 
+    # Sign in with Google (vehicle owners only; authority accounts never).
+    # All three empty = the Google button is hidden, password login unchanged.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    # Must be registered in Google Cloud Console, e.g.
+    # http://localhost:8000/api/auth/google/callback
+    GOOGLE_REDIRECT_URI: str = ""
+    # Optional demo pre-linking: "arjun.rao=someone@gmail.com,priya.patel=x@gmail.com".
+    # Matched once on a verified email, then stored as the account's Google `sub`.
+    GOOGLE_OWNER_LINKS: str = ""
+
+    # Crash text messages. Default: ConsoleSmsProvider (logged + stored, nothing
+    # sent). Twilio is used only when all three are set; placeholder numbers
+    # (+9100000...) are never sent to.
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_FROM_NUMBER: str = ""
+    # One crash notification per vehicle per incident: alerts for the same car
+    # (or its partner) within this many seconds belong to the same incident.
+    CRASH_NOTIFY_COOLDOWN_S: float = 120.0
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH) if ENV_PATH.exists() else ".env",
         env_file_encoding="utf-8",

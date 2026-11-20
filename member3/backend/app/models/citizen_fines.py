@@ -47,7 +47,13 @@ class Fine(Base):
     plate_status = Column(String(32), nullable=True)               # confirmed | low_confidence
     evidence_time_s = Column(Float, nullable=True)                 # position in the video
     detected_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Unpaid (= issued) | Paid | Disputed
     status = Column(String(16), nullable=False, default="Unpaid", server_default="Unpaid")
+    # Fines issued by hand from the authority dashboard (migration 009)
+    location = Column(String(255), nullable=True)
+    issued_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    dispute_reason = Column(Text, nullable=True)
+    disputed_at = Column(DateTime(timezone=True), nullable=True)
 
     video = relationship("Video", back_populates="fines")
 

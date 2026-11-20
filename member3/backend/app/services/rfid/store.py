@@ -255,12 +255,9 @@ class Persistence:
             plate_display=payload.get("plate_display"), epc=payload.get("epc"),
             role=payload["role"], sim_vehicle_id=payload.get("sim_vehicle_id"),
         ))
-        if payload["role"] == ROLE_INVOLVED:
-            # the registered owner's citizen alert, in the same transaction
-            from app.services.notification_service import notify_crash_involvement
-
-            session.flush()
-            notify_crash_involvement(session, payload["incident_id"], payload["plate_norm"])
+        # No owner notification here: "involved" includes the collision partner
+        # named by the association, which must not reach that owner before the
+        # authority confirms it (services/crash_notify.py owns crash messages).
 
     def _write_rfid_report(self, session, payload: dict) -> None:
         from app.models.models import RfidReport

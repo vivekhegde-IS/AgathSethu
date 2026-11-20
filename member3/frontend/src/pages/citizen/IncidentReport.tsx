@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Card, Spinner } from '@components/ui'
 import { CitizenIncident, errorMessage, fetchCitizenIncident, formatIst } from '@api/portal'
+import type { LiveEvent } from '@api/live'
+import { CrashAnswerPanel } from '@components/live/CrashAnswer'
+import { useLiveEvents } from '@hooks/useLiveEvents'
 
 /**
  * What a citizen may see about a crash their vehicle was involved in:
@@ -13,12 +16,22 @@ export const CitizenIncidentReport: React.FC = () => {
   const [data, setData] = useState<CitizenIncident | null>(null)
   const [error, setError] = useState('')
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!incidentId) return
     fetchCitizenIncident(incidentId)
       .then(setData)
       .catch((err) => setError(errorMessage(err, 'This incident report is not available.')))
   }, [incidentId])
+
+  useEffect(load, [load])
+
+  // live: the authority's decision on your answer shows up without a refresh
+  useLiveEvents(
+    useCallback((event: LiveEvent) => {
+      if (event.type.startsWith('crash.') || event.type === 'notification.created') load()
+    }, [load]),
+    load,
+  )
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -33,7 +46,7 @@ export const CitizenIncidentReport: React.FC = () => {
         <Card
           title={`Crash incident ${data.reference}`}
           actions={
-            <Badge variant={data.status === 'Resolved' ? 'success' : 'warning'} size="sm">
+            <Badge variant={data.status === 'Resolved' || data.status === 'False alarm' ? 'success' : 'warning'} size="sm">
               {data.status}
             </Badge>
           }
@@ -61,6 +74,12 @@ export const CitizenIncidentReport: React.FC = () => {
           <p className="mt-4 text-xs text-slate-600">
             Quote the reference {data.reference} when contacting the traffic authority about this incident.
           </p>
+        </Card>
+      )}
+      {data && incidentId && (
+        <Card title={data.response ? 'Your answer' : 'Are you safe?'}>
+          <CrashAnswerPanel refId={incidentId} current={data.response}
+                            onAnswered={(answer) => setData({ ...data, response: answer })} />
         </Card>
       )}
     </div>

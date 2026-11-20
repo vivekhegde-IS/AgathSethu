@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom'
 import { useAuthStore } from '@stores/authStore'
 import { Card, MetricCard, Badge, Button, Spinner } from '@components/ui'
 import { FinesTable, rupees, useMyFines } from '@components/citizen/FinesTable'
+import { useLiveEvents } from '@hooks/useLiveEvents'
 
 export const CitizenDashboard: React.FC = () => {
   const { user } = useAuthStore()
   // Real data only: vehicles and fines of the logged-in citizen from the backend.
   const { data, error, reload } = useMyFines()
+  // live: a new fine / payment / crash updates this page without a refresh
+  useLiveEvents(reload, reload)
 
   const vehicles = data?.vehicles ?? []
   const fines = data?.fines ?? []

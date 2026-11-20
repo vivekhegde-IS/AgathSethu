@@ -59,8 +59,17 @@ class AuthorityRegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # Username (seeded demo accounts, e.g. "arjun.rao") or email address
+    email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def identifier_present(cls, v: str) -> str:
+        v = v.strip()
+        if not 1 <= len(v) <= 255:
+            raise ValueError("Enter your username or email")
+        return v
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -107,6 +116,8 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     jurisdiction: Optional[str] = None
     created_at: datetime
+    username: Optional[str] = None
+    google_email: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

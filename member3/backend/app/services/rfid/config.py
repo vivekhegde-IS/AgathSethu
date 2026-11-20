@@ -16,16 +16,8 @@ from app.core.config import data_dir
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 
 # The 8 simulated registrations (test data only, matching vivek_fb.py).
-SEED_PLATES = {
-    "A": "KA 01 AT 4521",
-    "B": "MH 12 BR 7814",
-    "C": "TN 09 CK 2365",
-    "D": "KL 07 DL 9182",
-    "E": "DL 03 EN 6047",
-    "F": "GJ 05 FP 3419",
-    "G": "AP 16 GQ 8273",
-    "H": "TG 08 HR 5196",
-}
+# Single source: app/core/fleet.py
+from app.core.fleet import PLATES as SEED_PLATES  # noqa: E402
 
 # Junction world coordinates (matches vivek_fb.py and carla_ws.py).
 JUNCTION_WORLD = {

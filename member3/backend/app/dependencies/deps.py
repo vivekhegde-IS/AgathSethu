@@ -84,6 +84,21 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def user_from_token(db: Session, token: str | None) -> User | None:
+    """WebSocket auth for /ws/events: the same JWT as the REST API. Returns the
+    active user (any role), else None."""
+    if not token:
+        return None
+    try:
+        user_id = decode_access_token(token).get("sub")
+    except JWTError:
+        return None
+    user = UserService.get_by_id(db, user_id) if user_id else None
+    if user is None or user.status != "active":
+        return None
+    return user
+
+
 def authority_from_token(db: Session, token: str | None) -> User | None:
     """WebSocket auth (browsers cannot set headers there): the same JWT, passed
     as a query parameter. Returns the active authority/admin user, else None."""

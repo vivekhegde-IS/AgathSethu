@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@stores/authStore'
 import { Button } from '@components/ui'
@@ -7,9 +7,11 @@ export interface TopbarProps {
   portal: 'citizen' | 'authority'
   title?: string
   subtitle?: string
+  /** shown before the sign-out button (e.g. the citizen notification bell) */
+  extra?: ReactNode
 }
 
-export const Topbar: React.FC<TopbarProps> = ({ portal, title, subtitle }) => {
+export const Topbar: React.FC<TopbarProps> = ({ portal, title, subtitle, extra }) => {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
 
@@ -38,6 +40,7 @@ export const Topbar: React.FC<TopbarProps> = ({ portal, title, subtitle }) => {
       <div className="flex items-center gap-4">
         {/* Action controls */}
         <div className="flex items-center gap-3">
+          {extra}
           <Button variant="secondary" size="sm" onClick={handleLogout}>
             Sign out ({user?.name})
           </Button>

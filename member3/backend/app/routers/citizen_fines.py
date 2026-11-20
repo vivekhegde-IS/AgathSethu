@@ -124,4 +124,8 @@ def pay_fine(fine_id: int, body: PayRequest, current_user: User = Depends(get_cu
     db.add(payment)
     db.commit()
     db.refresh(payment)
+    db.refresh(fine)
+    from app.services.live_fines import publish_fine
+
+    publish_fine(db, fine, "fine.updated")
     return {"fine_id": fine.id, "status": fine.status, "payment": _payment_view(payment)}

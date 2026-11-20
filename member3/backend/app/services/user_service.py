@@ -18,6 +18,14 @@ class UserService:
         return db.query(User).filter(User.email == email.lower()).first()
 
     @staticmethod
+    def get_by_login(db: Session, identifier: str) -> User | None:
+        """Username (demo accounts) or email."""
+        identifier = identifier.strip()
+        if "@" in identifier:
+            return UserService.get_by_email(db, identifier)
+        return db.query(User).filter(User.username == identifier.lower()).first()
+
+    @staticmethod
     def get_by_id(db: Session, user_id: str) -> User | None:
         """Retrieve a user by UUID."""
         return db.query(User).filter(User.id == user_id).first()
@@ -96,12 +104,12 @@ class UserService:
         Returns (user, '') on success.
         Returns (None, reason) on failure.
         """
-        user = UserService.get_by_email(db, email)
+        user = UserService.get_by_login(db, email)
         if not user:
-            return None, "Invalid email or password"
+            return None, "Invalid username/email or password"
 
         if not verify_password(password, user.password_hash):
-            return None, "Invalid email or password"
+            return None, "Invalid username/email or password"
 
         if user.status == "pending_approval":
             return None, "Your account is pending approval. Please contact your administrator."

@@ -21,11 +21,19 @@ from app.routers import incidents
 from app.routers import citizen_fines
 from app.routers import routine_violation
 from app.routers import webrtc_streams
+from app.routers import google_auth
+from app.routers import live
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan — startup and shutdown events."""
+    import asyncio
+
+    from app.services.events import hub
+
+    # live dashboard events are delivered on this loop (publish is thread-safe)
+    hub.bind_loop(asyncio.get_running_loop())
 
     print(
         f"[STARTUP] AGHAT SETHU Backend starting — "
@@ -151,6 +159,10 @@ app.include_router(incidents.health_router)
 # Citizen payments / notifications / crash reports, and authority dashboards
 app.include_router(citizen_account.router)
 app.include_router(authority_ops.router)
+
+# Sign in with Google (owners only), live dashboards (/me, /authority) + /ws/events
+app.include_router(google_auth.router)
+app.include_router(live.router)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

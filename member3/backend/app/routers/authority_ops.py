@@ -121,7 +121,7 @@ def summary(db: Session = Depends(get_db)):
 
 @router.get("/fines")
 def fines_and_revenue(
-    status: str = Query("all", description="all | Unpaid | Paid"),
+    status: str = Query("all", description="all | Unpaid | Paid | Disputed"),
     day: date | None = Query(None, alias="date", description="challans issued on this IST day (YYYY-MM-DD)"),
     plate: str | None = Query(None, max_length=20, description="number plate, full or partial (spaces ignored)"),
     page: int = Query(1, ge=1),
@@ -131,7 +131,7 @@ def fines_and_revenue(
 ):
     year = year or datetime.now(IST).year
     query = db.query(Fine)
-    if status in ("Unpaid", "Paid"):
+    if status in ("Unpaid", "Paid", "Disputed"):
         query = query.filter(Fine.status == status)
     if day is not None:
         start = datetime.combine(day, time.min, tzinfo=IST)

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@stores/authStore'
 import { OfficialAlert, OfficialField, OfficialFormCard, OfficialSubmit } from '@components/public/OfficialForm'
+import { GoogleButton, useGoogleEnabled } from '@components/live/LiveWidgets'
 
 export const CitizenLogin: React.FC = () => {
   const navigate = useNavigate()
@@ -10,6 +11,8 @@ export const CitizenLogin: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [localError, setLocalError] = useState('')
+  // Vehicle owners only: the authority login page never shows this button
+  const googleEnabled = useGoogleEnabled()
 
   const displayError = localError || error || ''
 
@@ -25,13 +28,13 @@ export const CitizenLogin: React.FC = () => {
       setLocalError('This account is an authority account. Please use Authority Login.')
       return
     }
-    navigate('/citizen/dashboard')
+    navigate('/me')
   }
 
   return (
     <OfficialFormCard
       title="Citizen Login"
-      subtitle="Sign in with the email and password of your citizen account."
+      subtitle="Vehicle owners: sign in with your username (or email) and password."
       footer={
         <div className="flex flex-col gap-1">
           <span>
@@ -52,8 +55,8 @@ export const CitizenLogin: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
         {displayError && <OfficialAlert>{displayError}</OfficialAlert>}
         <OfficialField
-          label="Email address"
-          type="email"
+          label="Username or email"
+          type="text"
           noAutofill
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -71,6 +74,17 @@ export const CitizenLogin: React.FC = () => {
           Sign in
         </OfficialSubmit>
       </form>
+      {googleEnabled && (
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="flex-1 border-t" />or<span className="flex-1 border-t" />
+          </div>
+          <GoogleButton purpose="login" onError={setLocalError} />
+          <p className="text-xs text-slate-500">
+            Works only for a Google account linked to your vehicle (link it on your /me page).
+          </p>
+        </div>
+      )}
     </OfficialFormCard>
   )
 }

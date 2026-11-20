@@ -143,7 +143,10 @@ def test_profile_update_persists(client, world):
 
 
 # ── crash notifications ──────────────────────────────────────────────────────────
-def test_crash_notifies_both_registered_owners(client, world):
+def test_rfid_writer_does_not_notify_owners(client, world):
+    """Review gating (paper): "involved" includes the partner named by the
+    association, so the RFID writer never notifies owners itself; crash text
+    messages come from services/crash_notify.py (tests/test_accounts_live.py)."""
     from app.services.rfid.store import Persistence  # the RFID writer that records involved vehicles
 
     writer = Persistence.__new__(Persistence)
@@ -156,19 +159,13 @@ def test_crash_notifies_both_registered_owners(client, world):
 
     for who, plate in (("alice", world["plate_a"]), ("bob", world["plate_b"])):
         body = client.get("/api/citizen/notifications", headers=_token(world[who])).json()
-        crash = [n for n in body["notifications"] if n["kind"] == "crash_involvement"]
-        assert len(crash) == 1 and crash[0]["incident_id"] == world["incident_id"]
-        assert plate in crash[0]["title"] and "Junction 2" in crash[0]["message"]
+        assert [n for n in body["notifications"] if n["kind"] == "crash_involvement"] == []
         report = client.get(f"/api/citizen/incidents/{world['incident_id']}", headers=_token(world[who]))
         assert report.status_code == 200 and report.json()["location"] == "Junction 2"
         assert report.json()["role_determined"] is False
     # an uninvolved citizen cannot open the report
     assert client.get(f"/api/citizen/incidents/{world['incident_id']}",
                       headers=_token(world["carol"])).status_code == 404
-    # read state persists
-    alice = _token(world["alice"])
-    assert client.post("/api/citizen/notifications/read-all", headers=alice).status_code == 200
-    assert client.get("/api/citizen/notifications", headers=alice).json()["unread"] == 0
 
 
 # ── resolution + radar day rollover ──────────────────────────────────────────────
@@ -295,7 +292,7 @@ def test_records_survive_a_new_session(world):
     assert db.query(FinePayment).filter(FinePayment.fine_id == world["fine_id"]).count() == 1
     assert db.get(Fine, world["fine_id"]).status == "Paid"
     assert db.get(Incident, world["incident_id"]).resolved_by == world["officer"].id
-    assert db.query(Notification).filter(Notification.incident_id == world["incident_id"]).count() == 2
+    assert db.query(Notification).filter(Notification.incident_id == world["incident_id"]).count() == 0
     db.close()
 
 

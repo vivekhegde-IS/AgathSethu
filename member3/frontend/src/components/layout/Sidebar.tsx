@@ -12,6 +12,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ portal }) => {
   const { user } = useAuthStore()
 
   const citizenNav = [
+    { name: 'My vehicle (live)', path: '/me', icon: '📱' },
     { name: 'Dashboard', path: '/citizen/dashboard', icon: '📊' },
     { name: 'My Vehicles', path: '/citizen/vehicles', icon: '🚗' },
     { name: 'My Violations', path: '/citizen/violations', icon: '⚠️' },
@@ -23,6 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ portal }) => {
 
   const authorityNav = [
     { section: 'OPERATIONS' },
+    { name: 'Control Room (live)', path: '/authority', icon: '🛰️' },
     { name: 'Overview', path: '/authority/dashboard', icon: '⚡' },
     { name: 'Live Camera Feeds', path: '/authority/live', icon: '📹' },
 

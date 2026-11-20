@@ -16,6 +16,7 @@
  *   PATCH /auth/me                         {full_name, email, phone}
  */
 
+import type { CrashResponseView } from './live'
 import apiClient from './apiClient'
 import type { UserResponse } from './auth'
 
@@ -241,6 +242,8 @@ export interface CitizenNotification {
   data: Record<string, unknown>
   read: boolean
   created_at: string | null
+  /** crash notifications only: the owner's answer, null while unanswered */
+  response?: CrashResponseView | null
 }
 
 export async function fetchNotifications(): Promise<{ unread: number; notifications: CitizenNotification[] }> {
@@ -265,6 +268,7 @@ export interface CitizenIncident {
   your_vehicles: string[]
   involved_vehicles: string[]
   role_determined: boolean
+  response?: CrashResponseView | null
 }
 
 export async function fetchCitizenIncident(id: string): Promise<CitizenIncident> {

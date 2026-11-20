@@ -9,9 +9,14 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from '@api/portal'
+import { useLiveEvents } from '@hooks/useLiveEvents'
 
-const KIND_LABEL: Record<string, { label: string; variant: 'danger' | 'warning' | 'info' }> = {
+const KIND_LABEL: Record<string, { label: string; variant: 'danger' | 'warning' | 'info' | 'success' }> = {
   crash_involvement: { label: 'Crash', variant: 'danger' },
+  crash: { label: 'Crash', variant: 'danger' },
+  partner: { label: 'Crash review', variant: 'warning' },
+  hit_and_run: { label: 'Crash review', variant: 'warning' },
+  review_outcome: { label: 'Crash review', variant: 'info' },
   fine_issued: { label: 'E-challan', variant: 'warning' },
 }
 
@@ -32,6 +37,9 @@ export const CitizenNotifications: React.FC = () => {
   useEffect(() => {
     load()
   }, [load])
+
+  // live: new notifications appear without a refresh
+  useLiveEvents(load, load)
 
   const markRead = async (n: CitizenNotification) => {
     if (n.read) return
@@ -94,12 +102,18 @@ export const CitizenNotifications: React.FC = () => {
                         <span className="text-[10px] font-mono text-slate-500">{formatIst(n.created_at)}</span>
                         {n.incident_id && (
                           <Link
-                            to={`/citizen/incidents/${n.incident_id}`}
+                            to={`/citizen/incidents/${encodeURIComponent(n.incident_id)}`}
                             onClick={() => markRead(n)}
                             className="text-[11px] font-mono text-blue-800 hover:underline"
                           >
-                            View incident report →
+                            {n.response === null ? 'Are you safe? Answer now →' : 'View incident report →'}
                           </Link>
+                        )}
+                        {n.response && (
+                          <span className="text-[11px] font-mono text-slate-700">
+                            You answered: {n.response.label}
+                            {n.response.review_status === 'pending' && ' (awaiting authority)'}
+                          </span>
                         )}
                         {n.fine_id != null && (
                           <Link

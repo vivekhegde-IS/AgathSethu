@@ -25,7 +25,7 @@ export const AuthorityLogin: React.FC = () => {
       setLocalError('This account is a citizen account. Please use Citizen Login.')
       return
     }
-    navigate('/authority/dashboard')
+    navigate('/authority')
   }
 
   return (
@@ -53,8 +53,8 @@ export const AuthorityLogin: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
         {displayError && <OfficialAlert>{displayError}</OfficialAlert>}
         <OfficialField
-          label="Official email address"
-          type="email"
+          label="Username or email"
+          type="text"
           noAutofill
           value={email}
           onChange={(e) => setEmail(e.target.value)}

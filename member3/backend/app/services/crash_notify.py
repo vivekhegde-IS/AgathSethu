@@ -385,6 +385,10 @@ def _handle_escape(db, message: dict, now: datetime) -> dict:
             other = (db.query(CrashReport).filter(CrashReport.incident_key == incident_key,
                                                   CrashReport.vehicle_id != vehicle.id).first())
             struck = db.get(Vehicle, other.vehicle_id) if other is not None else None
+    from app.services.crash_response import owners_settled   # avoid an import cycle
+    if recent is not None and owners_settled(db, incident_key):
+        # every owner already reported a minor crash: driving away is fine
+        return {"status": "settled", "incident_key": incident_key, "review_item": None}
     named = (db.query(ReviewItem).filter(ReviewItem.incident_key == incident_key,
                                          ReviewItem.kind == KIND_PARTNER).first())
     route = (named.decision_route if named is not None

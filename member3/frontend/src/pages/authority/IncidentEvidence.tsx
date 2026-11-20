@@ -274,7 +274,8 @@ const IncidentTimeline: React.FC<{ detail: IncidentDetail; onZoom: (file: Eviden
       {(detail.fleeing_vehicles ?? []).map((suspect) => (
         <Card
           key={suspect.plate_norm}
-          title={`Fleeing vehicle · ${suspect.sim_vehicle_id ?? '?'}`}
+          title={`${(detail as { fled_cleared?: boolean }).fled_cleared ? 'Drove on after a minor crash (all owners agreed)'
+            : 'Fleeing vehicle'} · ${suspect.sim_vehicle_id ?? '?'}`}
           subtitle={suspect.basis}
         >
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-mono">

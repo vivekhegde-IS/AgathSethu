@@ -117,7 +117,8 @@ export interface ReviewView {
   id: number
   incident_key: string
   kind: 'partner' | 'hit_and_run'
-  status: 'pending' | 'confirmed' | 'rejected'
+  /** dismissed: every owner reported a minor crash, so driving away is not an offence */
+  status: 'pending' | 'confirmed' | 'rejected' | 'dismissed'
   decision_route: string | null
   decision_route_label: string | null
   accused: VehicleView | null

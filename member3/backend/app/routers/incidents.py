@@ -98,6 +98,11 @@ def _crash_kind(db: Session, incident: Incident, vehicles, sightings=()) -> dict
     # left the scene: Member 1's escape report (role "fled"), or - when that
     # message never arrived - the car's tag read at another junction after the crash
     left = {s["plate_norm"] for s in fleeing_suspects(vehicles, sightings) if s.get("plate_norm")}
+    # every owner answered minor and the case resolved: driving away is not fleeing (route / evidence stay)
+    excused = sorted(left) if left and crash_response.owners_settled(
+        db, crash_response.case_ref_for_incident(db, incident)) else []
+    if excused:
+        left = set()
     if statuses & set(STATUS_TWO_CAR) or len(crashed) >= 2:
         kind = "two_car" if len(crashed) <= 2 else "multi_vehicle"
     elif crashed and statuses <= {STATUS_SINGLE} and statuses:
@@ -111,6 +116,7 @@ def _crash_kind(db: Session, incident: Incident, vehicles, sightings=()) -> dict
         "crashed_vehicle_count": len(crashed),
         "hit_and_run": kind in ("two_car", "multi_vehicle") and bool(left),
         "left_scene_plates": sorted(left),
+        "left_scene_excused_plates": excused,
     }
 
 
@@ -694,8 +700,13 @@ def _detail(db: Session, incident: Incident) -> dict:
         by_match[str(row.vision_match_id)].append(row)
     incident_files = by_match.get("None", [])
     suspects = fleeing_suspects(vehicles, sightings)
-    suspect_epcs = {suspect["epc"] for suspect in suspects if suspect["epc"]}
     fled_plates = {vehicle.plate_norm for vehicle in vehicles if vehicle.role == ROLE_FLED}
+    # every owner answered minor: keep the car's route and evidence, drop only the "fled" label
+    fled_cleared = bool(suspects) and crash_response.owners_settled(
+        db, crash_response.case_ref_for_incident(db, incident))
+    if fled_cleared:
+        fled_plates = set()
+    suspect_epcs = {suspect["epc"] for suspect in suspects if suspect["epc"]}
     vehicles = [vehicle for vehicle in vehicles if vehicle.role != ROLE_FLED]
     watch_epcs = {vehicle.epc for vehicle in vehicles if vehicle.epc}
 
@@ -761,6 +772,8 @@ def _detail(db: Session, incident: Incident) -> dict:
         # (other vehicles never get a card)
         "best_evidence_by_junction": cards,
         "fleeing_vehicles": [fleeing_vehicle_summary(suspect, cards) for suspect in suspects],
+        # true when the case was resolved: show those cars as "drove on", not "fled"
+        "fled_cleared": fled_cleared,
         # world (x, y) of every junction, for the tracking map
         "junction_positions": {junction: {"x": x, "y": y, "label": junction_label(junction)}
                                for junction, (x, y) in JUNCTION_WORLD.items()},

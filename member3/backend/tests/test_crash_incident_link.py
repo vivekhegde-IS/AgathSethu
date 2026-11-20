@@ -115,3 +115,76 @@ def test_officer_resolving_on_the_radar_resolves_the_app_case(client, pair):
     owner = login(client, "arjun.rao")
     detail = client.get(f"/api/citizen/incidents/{pair['key']}", headers=bearer(owner)).json()
     assert detail["status"] == "Resolved"                    # what the app shows
+
+
+# ── resolved case: only the "fled" label goes ────────────────────────────────────
+def _escape(letter):
+    car = FLEET[letter]
+    return crash_notify.handle_vehicle_state(
+        {"type": "vehicle_state", "vehicle_id": letter, "plate_number": car.plate, "epc": car.epc,
+         "state": "POST_CRASH_MOVING", "speed_kmh": 20.0, "distance_from_crash_m": 12.0,
+         "escape_confirmed": True, "timestamp_sim": 60.0}, now=datetime.now(timezone.utc))
+
+
+def _hit_and_run_reviews(key):
+    from app.models.live import ReviewItem
+    db = SessionLocal()
+    try:
+        return [i.status for i in db.query(ReviewItem).filter(ReviewItem.incident_key == key,
+                                                              ReviewItem.kind == "hit_and_run")]
+    finally:
+        db.close()
+
+
+def _mark_fled(incident_id, letter):
+    db = SessionLocal()
+    try:
+        db.add(IncidentVehicle(incident_id=incident_id, plate_norm=FLEET[letter].plate_norm, role="fled"))
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_resolved_case_drops_only_the_fled_label(client, pair):
+    incident_id = rfid_incident(pair)
+    assert _escape("B")["status"] == "review"                    # B drove away before anyone answered
+    _mark_fled(incident_id, "B")
+    assert _hit_and_run_reviews(pair["key"]) == ["pending"]
+    assert radar_item(client, incident_id)["hit_and_run"] is True
+
+    answer(client, "A", pair["key"], {"response": "not_serious"})
+    answer(client, "B", pair["key"], {"response": "not_serious"})  # both minor -> resolved
+    assert _hit_and_run_reviews(pair["key"]) == ["dismissed"]
+    item = radar_item(client, incident_id)
+    assert item["hit_and_run"] is False and item["left_scene_plates"] == []
+    assert item["left_scene_excused_plates"] == [FLEET["B"].plate_norm]
+    detail = client.get(f"/api/incidents/{incident_id}", headers=bearer(login(client, "authority.admin"))).json()
+    assert detail["fled_cleared"] is True and detail["fleeing_vehicles"]       # route / evidence kept
+    assert _escape("B")["status"] == "settled"                                 # no new hit-and-run review
+
+    answer(client, "B", pair["key"], {"accident_occurred": True})             # B changes their mind
+    assert _hit_and_run_reviews(pair["key"]) == ["pending"]
+    assert radar_item(client, incident_id)["hit_and_run"] is True
+
+
+def test_open_case_keeps_the_fled_label(client, pair):
+    incident_id = rfid_incident(pair)
+    _escape("B")
+    _mark_fled(incident_id, "B")
+    answer(client, "A", pair["key"], {"response": "not_serious"})              # B has not answered yet
+    assert _hit_and_run_reviews(pair["key"]) == ["pending"]
+    assert radar_item(client, incident_id)["hit_and_run"] is True
+
+
+def test_officer_resolving_keeps_the_fled_label(client, pair):
+    """Only the owners' own "minor" answers clear "fled"; an officer's resolve does not."""
+    incident_id = rfid_incident(pair)
+    _escape("B")
+    _mark_fled(incident_id, "B")
+    token = login(client, "authority.admin")
+    r = client.post(f"/api/incidents/{incident_id}/resolve", headers=bearer(token),
+                    json={"password": TEST_PASSWORD, "note": "Cleared"})
+    assert r.status_code == 200
+    item = radar_item(client, incident_id)
+    assert item["resolved"] is True and item["hit_and_run"] is True
+    assert _hit_and_run_reviews(pair["key"]) == ["pending"]

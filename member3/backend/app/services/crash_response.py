@@ -236,6 +236,38 @@ def crash_key_for_incident(db: Session, incident: Incident) -> str | None:
     return None
 
 
+def owners_settled(db: Session, ref: str | None) -> bool:
+    """EVERY owner of the crash answered minor / no authority needed, and the
+    case resolved that way (not an officer's decision). A car that drove away
+    is then not labelled "fled" or "hit-and-run"; its route and evidence stay."""
+    if not ref:
+        return False
+    case = db.get(CrashCaseOutcome, ref)
+    return case is not None and case.outcome == "resolved" and case.reason_code == "all_minor"
+
+
+SETTLED_NOTE = "Every owner reported a minor crash and it was resolved: leaving the scene is not an offence."
+
+
+def _excuse_escapes(db: Session, ref: str, settled: bool, outbox: list) -> None:
+    """Close (settled) or reopen (no longer settled) the crash's hit-and-run reviews."""
+    from app.models.live import ReviewItem
+    now = datetime.now(timezone.utc)
+    if settled:
+        items = db.query(ReviewItem).filter(ReviewItem.incident_key == ref, ReviewItem.kind == "hit_and_run",
+                                            ReviewItem.status == "pending").all()
+        for item in items:
+            item.status, item.decided_at, item.decision_note = "dismissed", now, SETTLED_NOTE
+    else:
+        items = db.query(ReviewItem).filter(ReviewItem.incident_key == ref, ReviewItem.kind == "hit_and_run",
+                                            ReviewItem.status == "dismissed",
+                                            ReviewItem.decision_note == SETTLED_NOTE).all()
+        for item in items:
+            item.status, item.decided_at, item.decision_note = "pending", None, None
+    for item in items:
+        outbox.append(("review", item))
+
+
 def case_ref_for_incident(db: Session, incident: Incident) -> str:
     """Where this incident's owner answers and case live: its crash key, else its own id."""
     return crash_key_for_incident(db, incident) or str(incident.id)
@@ -346,6 +378,8 @@ def _evaluate(db: Session, kind: str, ref: str, now: datetime, outbox: list) -> 
         _resolve(db, kind, ref, answers, now, reason, None, outbox)
     elif outcome != "resolved" and previous == "resolved":
         _reopen(db, kind, ref, answers)
+    if kind == "crash":
+        _excuse_escapes(db, ref, outcome == "resolved" and code == "all_minor", outbox)
     if outcome == "not_resolved" and code in RESPONSES_SEVERE:
         for incident in _incidents_of(db, kind, ref):
             if incident.status not in CLOSED:
@@ -363,6 +397,10 @@ def _flush(db: Session, ref: str, outbox: list) -> None:
         owners = {r.user_id for r in responses_for(db, ref)}
         events.publish("crash.case_updated", {"case": view}, user_ids=list(owners), authority=True)
     for item in outbox:
+        if item[0] == "review":
+            from app.services.crash_notify import review_view
+            events.publish("review.updated", {"review": review_view(db, item[1])}, authority=True)
+            continue
         if isinstance(item[0], Notification):
             db.refresh(item[0])
             events.publish("notification.created", {"notification": notification_view(item[0])},

@@ -13,6 +13,8 @@ export interface CrashKind {
   crashed_vehicle_count?: number
   hit_and_run?: boolean
   left_scene_plates?: string[]
+  /** drove away, but every owner answered minor and the case resolved: not fleeing */
+  left_scene_excused_plates?: string[]
 }
 
 export const CrashTypeBadge: React.FC<{ kind: CrashKind }> = ({ kind }) => {
@@ -31,6 +33,8 @@ export const CrashTypeBadge: React.FC<{ kind: CrashKind }> = ({ kind }) => {
         <Badge variant="danger" size="sm">Hit-and-run</Badge>
       ) : left && kind.crash_type === 'single_vehicle' ? (
         <Badge variant="warning" size="sm">Left the scene</Badge>
+      ) : (kind.left_scene_excused_plates ?? []).length > 0 ? (
+        <Badge variant="muted" size="sm">Drove on after a minor crash (all owners agreed)</Badge>
       ) : null}
     </>
   )

@@ -263,13 +263,12 @@ they count as one incident within 120 s.
 ### Watching it live (two tabs, same browser)
 
 1. Tab 1: open http://localhost:5173/authority/login and sign in as `authority.admin`.
-   You land on **/authority** (Control room).
+   You land on **/authority/dashboard** (Overview).
 2. Tab 2: open http://localhost:5173/citizen/login and sign in as `arjun.rao`
    (password or **Sign in with Google**). You land on **/me**.
    Optional: Tab 3 as `karthik.subramanian` (car C).
-3. Issue a fine to car C (in the Control room, or with `simulate_events.py fine`).
-   It appears instantly in the authority's fine list and on Karthik's `/me`, with
-   a toast. When Karthik pays or disputes it, the authority sees the status change live.
+3. Issue a fine to car C with `simulate_events.py fine`.
+   It appears instantly on Karthik's `/me`, with a toast, and in Fines & Revenue.
 4. Run `simulate_events.py crash-single`. Arjun's phone panel shows the text message,
    with a toast and an unread badge. The authority gets the crash alert.
 5. Run `simulate_events.py crash-pair`. The authority's Review queue shows

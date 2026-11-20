@@ -25,7 +25,7 @@ export const AuthorityLogin: React.FC = () => {
       setLocalError('This account is a citizen account. Please use Citizen Login.')
       return
     }
-    navigate('/authority')
+    navigate('/authority/dashboard')
   }
 
   return (

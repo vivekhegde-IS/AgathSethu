@@ -47,7 +47,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ portal }) => {
 
   const authorityNav = [
     { section: 'OPERATIONS' },
-    { name: 'Control Room (live)', path: '/authority', icon: '🛰️' },
     { name: 'Overview', path: '/authority/dashboard', icon: '⚡' },
     { name: 'Live Camera Feeds', path: '/authority/live', icon: '📹' },
 

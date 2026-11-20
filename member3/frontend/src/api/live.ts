@@ -141,16 +141,6 @@ export interface OwnerOverview {
   crashes: CrashReportView[]
 }
 
-export interface AuthorityLive {
-  fleet: VehicleView[]
-  fines: FineView[]
-  crashes: CrashReportView[]
-  reviews: ReviewView[]
-  pending_reviews: number
-  responses: CrashResponseView[]
-  pending_responses: number
-}
-
 export type LiveEventType =
   | 'fine.issued' | 'fine.updated' | 'crash.detected' | 'crash.partner_named'
   | 'hit_and_run.detected' | 'notification.created' | 'review.updated'
@@ -184,15 +174,6 @@ export const answerCrash = async (ref: string, response: CrashAnswer, note?: str
     { response, note: note || null, channel: 'web' })).data
 
 // ── authority ─────────────────────────────────────────────────────────────────────
-export const getAuthorityLive = async () => (await apiClient.get<AuthorityLive>('/authority/live')).data
-export const issueFine = async (body: { vehicle: string; amount: number; reason: string; location?: string }) =>
-  (await apiClient.post<FineView>('/authority/fines', body)).data
-export const upholdFine = async (fineId: number) =>
-  (await apiClient.post<FineView>(`/authority/fines/${fineId}/uphold`)).data
-export const decideReview = async (reviewId: number, confirm: boolean, note?: string) =>
-  (await apiClient.post<ReviewView>(`/authority/review/${reviewId}/${confirm ? 'confirm' : 'reject'}`,
-    { note: note || null })).data
-
 export const decideCrashAnswer = async (responseId: number, accept: boolean, note?: string) =>
   (await apiClient.post<CrashResponseView>(
     `/authority/crash-responses/${responseId}/${accept ? 'accept' : 'reject'}`, { note: note || null })).data

@@ -72,7 +72,7 @@ these changes:
 
 Run `npx tsc --noEmit` and `npx expo lint` before finishing, and test:
 log in as a citizen whose vehicle is in a crash -> the alarm rings within a
-second -> press "False alarm" -> the website's authority Control Room
+second -> press "False alarm" -> the website's Crash Incident Radar
 (/authority) shows "Owner: false alarm" live without a refresh.
 ```
 
@@ -126,7 +126,7 @@ Fields for the app (citizen and officer screens):
 
 ## How the authority side behaves
 
-- Every answer appears live in **Control Room -> Owner answers**, on the crash in
-  **Crash alerts**, and on the **Incident Radar** / **Incident Evidence** pages, with
-  the case outcome badge (auto-resolved / not resolved / waiting).
+- Every answer appears live on the website's **Incident Radar** / **Incident Evidence**
+  pages, with the case outcome badge (auto-resolved / not resolved / waiting).
+  (The old Control Room page was removed; its API endpoints remain for the app.)
 - The Incident Radar now updates live as answers arrive.

@@ -47,7 +47,6 @@ import { TrackingDashboard } from '@pages/authority/Tracking'
 import { JunctionDetailPage } from '@pages/authority/JunctionDetail'
 import { EvidenceManager } from '@pages/authority/Evidence'
 import { IncidentEvidencePage } from '@pages/authority/IncidentEvidence'
-import { ControlRoom } from '@pages/authority/ControlRoom'
 import { OfficerApprovals } from '@pages/authority/Approvals'
 
 // ─── Live dashboards ───────────────────────────────────────────────────────────
@@ -146,8 +145,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            {/* /authority itself: live control room (fines, crash alerts, review queue) */}
-            <Route index element={<ControlRoom />} />
+            <Route index element={<Navigate to="/authority/dashboard" replace />} />
             <Route path="dashboard" element={<AuthorityDashboard />} />
             <Route path="level1" element={<Level1Dashboard />} />
             <Route path="violations/:violationId" element={<AuthorityViolationDetail />} />

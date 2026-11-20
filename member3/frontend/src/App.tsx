@@ -48,6 +48,7 @@ import { JunctionDetailPage } from '@pages/authority/JunctionDetail'
 import { EvidenceManager } from '@pages/authority/Evidence'
 import { IncidentEvidencePage } from '@pages/authority/IncidentEvidence'
 import { ControlRoom } from '@pages/authority/ControlRoom'
+import { OfficerApprovals } from '@pages/authority/Approvals'
 
 // ─── Live dashboards ───────────────────────────────────────────────────────────
 import { OwnerLive } from '@pages/me/OwnerLive'
@@ -151,6 +152,8 @@ export default function App() {
             <Route path="level1" element={<Level1Dashboard />} />
             <Route path="violations/:violationId" element={<AuthorityViolationDetail />} />
             <Route path="fines" element={<FineManagement />} />
+            {/* admins only (the page itself checks the role too) */}
+            <Route path="approvals" element={<OfficerApprovals />} />
             <Route path="live" element={<LiveMonitoring />} />
             <Route path="incidents" element={<IncidentDashboard />} />
             <Route path="tracking" element={<Navigate to="/authority/evidence" replace />} />

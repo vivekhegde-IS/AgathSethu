@@ -59,3 +59,60 @@ def test_only_admins_reach_admin_routes(client, accounts):
     assert client.get("/api/admin/authority-accounts").status_code == 401
     admin = login(client, accounts["admin"])
     assert client.post("/api/admin/authority-accounts/not-a-uuid/approve", headers=bearer(admin)).status_code == 404
+
+
+@pytest.fixture()
+def mails(monkeypatch):
+    from app.routers import admin_accounts
+    sent = []
+    monkeypatch.setattr(admin_accounts, "send_decision_email",
+                        lambda name, email, approved: sent.append((email, approved)))
+    return sent
+
+
+def test_citizens_get_403_on_admin_routes(client, accounts):
+    citizen = login(client, "arjun.rao")
+    assert client.get("/api/admin/authority-accounts", headers=bearer(citizen)).status_code == 403
+    for action in ("approve", "reject"):
+        r = client.post(f"/api/admin/authority-accounts/{accounts['officer_id']}/{action}", headers=bearer(citizen))
+        assert r.status_code == 403
+    officer = login(client, "authority.admin")
+    r = client.post(f"/api/admin/authority-accounts/{accounts['officer_id']}/reject", headers=bearer(officer))
+    assert r.status_code == 403
+
+
+def test_approve_emails_the_officer(client, accounts, mails):
+    admin = login(client, accounts["admin"])
+    r = client.post(f"/api/admin/authority-accounts/{accounts['officer_id']}/approve", headers=bearer(admin))
+    assert r.json()["status"] == "active" and mails == [(accounts["officer"], True)]
+    client.post(f"/api/admin/authority-accounts/{accounts['officer_id']}/approve", headers=bearer(admin))
+    assert len(mails) == 1                                     # approving twice does not email twice
+    r = client.post(f"/api/admin/authority-accounts/{accounts['officer_id']}/reject", headers=bearer(admin))
+    assert r.status_code == 409                                # an approved officer is not "rejected"
+
+
+def test_reject_blocks_login_and_emails(client, accounts, mails):
+    admin = login(client, accounts["admin"])
+    r = client.post(f"/api/admin/authority-accounts/{accounts['officer_id']}/reject", headers=bearer(admin))
+    assert r.status_code == 200 and r.json()["status"] == "suspended"
+    assert mails == [(accounts["officer"], False)]
+    r = client.post("/api/auth/login", json={"email": accounts["officer"], "password": TEST_PASSWORD})
+    assert r.status_code in (401, 403)
+    listed = client.get("/api/admin/authority-accounts", headers=bearer(admin)).json()
+    assert all(i["id"] != accounts["officer_id"] for i in listed["items"])
+
+
+def test_admin_reaches_every_authority_area(client, accounts):
+    admin = bearer(login(client, accounts["admin"]))
+    for path in ("/api/authority/live", "/api/incidents/board?view=radar", "/api/authority/summary",
+                 "/api/authority/fines", "/api/incidents?source=all"):
+        assert client.get(path, headers=admin).status_code == 200, path
+
+
+def test_decision_email_text():
+    from app.services.approval_email import _deliverable, build_decision_message
+    ok = build_decision_message("Ravi K", "ravi@gov.example.in", True)
+    assert "You can now sign in" in ok.get_body(("plain",)).get_content()
+    no = build_decision_message("Ravi K", "ravi@gov.example.in", False)
+    assert "not approved" in no.get_body(("plain",)).get_content() and "sign in" not in no["Subject"].lower()
+    assert not _deliverable("x@example.com") and not _deliverable("x@test.local") and _deliverable("x@gmail.com")

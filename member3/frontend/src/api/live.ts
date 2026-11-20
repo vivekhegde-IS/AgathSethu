@@ -196,6 +196,27 @@ export const decideCrashAnswer = async (responseId: number, accept: boolean, not
   (await apiClient.post<CrashResponseView>(
     `/authority/crash-responses/${responseId}/${accept ? 'accept' : 'reject'}`, { note: note || null })).data
 
+// ── admin: officer sign-up approvals ──────────────────────────────────────────────
+export interface OfficerAccount {
+  id: string
+  name: string
+  full_name: string
+  email: string
+  phone: string | null
+  status: 'pending_approval' | 'active' | 'suspended' | string
+  badge_number: string | null
+  jurisdiction: string | null
+  created_at: string | null
+}
+
+export const getPendingOfficers = async () =>
+  (await apiClient.get<{ items: OfficerAccount[]; total: number }>('/admin/authority-accounts',
+    { params: { _: Date.now() } })).data
+export const decideOfficer = async (id: string, approve: boolean) =>
+  (await apiClient.post<OfficerAccount>(`/admin/authority-accounts/${id}/${approve ? 'approve' : 'reject'}`)).data
+/** Sidebar badge refresh after a decision on the approvals page. */
+export const OFFICERS_CHANGED = 'aghat:officers-changed'
+
 // ── Google sign-in (owners only) ──────────────────────────────────────────────────
 const TAB_KEY = 'aghat_google_tab_nonce'
 

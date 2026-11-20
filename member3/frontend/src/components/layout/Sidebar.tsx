@@ -1,6 +1,27 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@stores/authStore'
+import { getPendingOfficers, OFFICERS_CHANGED } from '@api/live'
+import { isAdmin } from '@services/auth/roleGuard'
+
+const PENDING_REFRESH_MS = 60_000
+
+/** Officer sign-ups waiting for an admin (admins only; 0 for everyone else). */
+function usePendingOfficers(enabled: boolean): number {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    if (!enabled) return undefined
+    const load = () => { getPendingOfficers().then((r) => setCount(r.total)).catch(() => undefined) }
+    load()
+    const timer = window.setInterval(load, PENDING_REFRESH_MS)
+    window.addEventListener(OFFICERS_CHANGED, load)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener(OFFICERS_CHANGED, load)
+    }
+  }, [enabled])
+  return count
+}
 import { PortalEmblem } from './OfficialLayout'
 
 export interface SidebarProps {
@@ -10,6 +31,8 @@ export interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ portal }) => {
   const location = useLocation()
   const { user } = useAuthStore()
+  const admin = portal === 'authority' && !!user && isAdmin(user.role)
+  const pendingOfficers = usePendingOfficers(admin)
 
   const citizenNav = [
     { name: 'My vehicle (live)', path: '/me', icon: '📱' },
@@ -36,6 +59,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ portal }) => {
     { name: 'Crash Incident Radar', path: '/authority/incidents', icon: '🚨' },
     { name: 'Evidence Records', path: '/authority/evidence', icon: '🔒' },
 
+    ...(admin
+      ? [{ section: 'ADMINISTRATION' },
+         { name: 'Officer Approvals', path: '/authority/approvals', icon: '🛡️', badge: pendingOfficers }]
+      : []),
   ]
 
   return (
@@ -99,7 +126,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ portal }) => {
                     <span className="text-sm">{item.icon}</span>
                     <span>{item.name}</span>
                   </div>
-
+                  {'badge' in item && item.badge ? (
+                    <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-600 text-white text-xs font-bold flex items-center justify-center"
+                          aria-label={`${item.badge} waiting`}>
+                      {item.badge}
+                    </span>
+                  ) : null}
                 </Link>
               )
             })}

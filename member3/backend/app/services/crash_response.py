@@ -48,7 +48,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.citizen_fines import Notification
 from app.models.live import CrashCaseOutcome, CrashReport, CrashResponse
-from app.models.models import Incident, IncidentVehicle, User, Vehicle
+from app.models.models import Incident, IncidentAlert, IncidentVehicle, User, Vehicle
 from app.services import events
 from app.services.plate_validation import format_plate
 
@@ -196,14 +196,71 @@ def _note(db: Session, user_id, plate: str | None, ref: str, title: str, text: s
     outbox.append((note, user_id))
 
 
-def _resolve(db: Session, kind: str, ref: str, answers: dict, now: datetime, reason: str,
-             by: User | None, outbox: list, false_positive: bool = False) -> None:
+# ── one crash, two records ───────────────────────────────────────────────────────
+# A CARLA crash is stored twice: the crash alert record (crash_reports, key
+# CR-..., what owners and the app answer) and the RFID / camera incident
+# (incidents, what the Incident Radar and Evidence Records show). They share
+# Member 1's alert_id, which restarts every run, so the link is
+# "same alert_id, recorded within LINK_WINDOW_S of each other". Every case
+# decision is applied to both, so the app and the website always agree.
+CLOSED = ("resolved", "false_positive")
+LINK_WINDOW_S = 120.0
+
+
+def incidents_for_crash(db: Session, key: str) -> list[Incident]:
+    """The incidents rows of the same crash as crash key ``key``."""
+    reports = db.query(CrashReport.alert_id, CrashReport.created_at).filter(CrashReport.incident_key == key).all()
+    alert_ids = {a for a, _ in reports if a}
+    if not alert_ids:
+        return []
+    window = timedelta(seconds=LINK_WINDOW_S)
+    lo, hi = min(t for _, t in reports) - window, max(t for _, t in reports) + window
+    ids = {i for (i,) in db.query(IncidentAlert.incident_id)
+           .filter(IncidentAlert.alert_id.in_(alert_ids), IncidentAlert.created_at.between(lo, hi))}
+    return db.query(Incident).filter(Incident.id.in_(ids)).all() if ids else []
+
+
+def crash_key_for_incident(db: Session, incident: Incident) -> str | None:
+    """The crash key (CR-...) of the same crash as this incidents row, if any."""
+    window = timedelta(seconds=LINK_WINDOW_S)
+    for alert_id, created in (db.query(IncidentAlert.alert_id, IncidentAlert.created_at)
+                              .filter(IncidentAlert.incident_id == incident.id)):
+        if not alert_id or created is None:
+            continue
+        report = (db.query(CrashReport.incident_key)
+                  .filter(CrashReport.alert_id == alert_id,
+                          CrashReport.created_at.between(created - window, created + window))
+                  .order_by(CrashReport.created_at).first())
+        if report is not None:
+            return report[0]
+    return None
+
+
+def case_ref_for_incident(db: Session, incident: Incident) -> str:
+    """Where this incident's owner answers and case live: its crash key, else its own id."""
+    return crash_key_for_incident(db, incident) or str(incident.id)
+
+
+def _incidents_of(db: Session, kind: str, ref: str) -> list[Incident]:
     if kind == "incident":
         incident = db.get(Incident, ref)
-        if incident is not None and incident.status not in ("resolved", "false_positive"):
-            incident.status = "false_positive" if false_positive else "resolved"
-            incident.resolved_at, incident.resolved_by = now, by.id if by else None
-            incident.resolution_note = reason
+        return [incident] if incident is not None else []
+    return incidents_for_crash(db, ref)
+
+
+def _close_incident(incident: Incident, now: datetime, by_id, reason: str | None, false_positive: bool) -> bool:
+    if incident.status in CLOSED:
+        return False
+    incident.status = "false_positive" if false_positive else "resolved"
+    incident.resolved_at, incident.resolved_by = now, by_id
+    incident.resolution_note = reason
+    return True
+
+
+def _resolve(db: Session, kind: str, ref: str, answers: dict, now: datetime, reason: str,
+             by: User | None, outbox: list, false_positive: bool = False) -> None:
+    for incident in _incidents_of(db, kind, ref):
+        _close_incident(incident, now, by.id if by else None, reason, false_positive)
     for plate, row in answers.items():
         if row.response in MINOR and row.review_status == "pending":
             row.review_status, row.reviewed_at = "accepted", now
@@ -214,9 +271,8 @@ def _resolve(db: Session, kind: str, ref: str, answers: dict, now: datetime, rea
 
 
 def _reopen(db: Session, kind: str, ref: str, answers: dict) -> None:
-    if kind == "incident":
-        incident = db.get(Incident, ref)
-        if incident is not None and incident.status in ("resolved", "false_positive"):
+    for incident in _incidents_of(db, kind, ref):
+        if incident.status in CLOSED:
             incident.status = "under_investigation"
             incident.resolved_at = incident.resolved_by = None
             incident.resolution_note = None
@@ -290,10 +346,10 @@ def _evaluate(db: Session, kind: str, ref: str, now: datetime, outbox: list) -> 
         _resolve(db, kind, ref, answers, now, reason, None, outbox)
     elif outcome != "resolved" and previous == "resolved":
         _reopen(db, kind, ref, answers)
-    if outcome == "not_resolved" and code in RESPONSES_SEVERE and kind == "incident":
-        incident = db.get(Incident, ref)
-        if incident is not None and incident.status not in ("resolved", "false_positive"):
-            incident.severity = "critical"
+    if outcome == "not_resolved" and code in RESPONSES_SEVERE:
+        for incident in _incidents_of(db, kind, ref):
+            if incident.status not in CLOSED:
+                incident.severity = "critical"
     outbox.append(("case", ref))
     return row
 
@@ -352,6 +408,57 @@ def sweep_overdue(db: Session, now: datetime | None = None) -> None:
                .filter(CrashCaseOutcome.outcome == "waiting", CrashCaseOutcome.deadline_at <= now).all())
     for ref, kind in overdue:
         refresh_case(db, kind, ref, now)
+    sync_linked_incidents(db, now)
+
+
+def sync_linked_incidents(db: Session, now: datetime | None = None, days: int = 7) -> int:
+    """Apply decided crash cases to their incidents rows. The RFID incident
+    can be written after the case was decided (or before this link existed),
+    so this runs whenever the authority pages load. Returns rows changed."""
+    now = now or datetime.now(timezone.utc)
+    changed = 0
+    cases = (db.query(CrashCaseOutcome)
+             .filter(CrashCaseOutcome.ref_kind == "crash", CrashCaseOutcome.outcome != "waiting",
+                     CrashCaseOutcome.updated_at >= now - timedelta(days=days)).all())
+    for case in cases:
+        for incident in incidents_for_crash(db, case.incident_ref):
+            if case.outcome == "resolved":
+                false_alarm = case.reason_code == "authority" and any(
+                    r.response == "false_alarm" and r.review_status == "accepted"
+                    for r in responses_for(db, case.incident_ref))
+                changed += _close_incident(incident, case.decided_at or now, case.decided_by, case.reason,
+                                           false_alarm)
+            elif (case.reason_code in RESPONSES_SEVERE and incident.status not in CLOSED
+                  and incident.severity != "critical"):
+                incident.severity = "critical"
+                changed += 1
+    if changed:
+        db.commit()
+    return changed
+
+
+def authority_close_case(db: Session, incident: Incident, officer: User, note: str | None) -> None:
+    """An officer resolved the incident on the Radar (password + note): close
+    the linked crash case too, so owners and the app see "Resolved"."""
+    key = crash_key_for_incident(db, incident)
+    ref, kind = (key, "crash") if key else (str(incident.id), "incident")
+    now = datetime.now(timezone.utc)
+    reason = (note or "").strip() or "Resolved by the traffic authority."
+    outbox: list = []
+    with _case_lock:
+        case = db.get(CrashCaseOutcome, ref)
+        if case is None:
+            if kind == "incident" and not responses_for(db, ref):
+                return                         # no crash alert and nobody answered: nothing to mirror
+            case = CrashCaseOutcome(incident_ref=ref, ref_kind=kind, outcome="waiting")
+            db.add(case)
+        if case.outcome == "resolved":
+            return
+        _resolve(db, kind, ref, _answers(db, ref), now, reason, officer, outbox)
+        case.outcome, case.reason_code, case.reason = "resolved", "authority", reason
+        case.decided_at, case.decided_by = now, officer.id
+        outbox.append(("case", ref))
+        _flush(db, ref, outbox)
 
 
 # ── answers ──────────────────────────────────────────────────────────────────────

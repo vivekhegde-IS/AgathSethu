@@ -171,8 +171,10 @@ def _resolution(db: Session, incident: Incident, vehicles) -> dict:
     resolution state and who resolved it."""
     resolver = db.get(User, incident.resolved_by) if incident.resolved_by else None
     involved = sorted({v.plate_norm for v in vehicles if v.plate_norm and v.role == "involved"})
+    # the same crash's crash-alert record (CR-...) holds the owners' answers and case
+    case_ref = crash_response.case_ref_for_incident(db, incident)
     answers = [crash_response.response_view(db, r, for_authority=True)
-               for r in crash_response.responses_for(db, str(incident.id))]
+               for r in crash_response.responses_for(db, case_ref)]
     return {
         "reference": incident_reference(incident.id),
         "location": junction_label(incident.crash_junction),
@@ -186,7 +188,8 @@ def _resolution(db: Session, incident: Incident, vehicles) -> dict:
         # owners' "are you safe?" answers (app / website) and the case outcome from them
         "citizen_responses": answers,
         "latest_citizen_response": answers[0] if answers else None,
-        "case": crash_response.case_view(db, str(incident.id)),
+        "case": crash_response.case_view(db, case_ref),
+        "crash_ref": case_ref if case_ref != str(incident.id) else None,
         "camera_stream": camera_stream_for(incident.crash_junction),
         # "View live feed" only for an unresolved crash of the run streaming right now
         "live_feed": bool(incident.status not in CLOSED and incident.run_id
@@ -302,6 +305,9 @@ async def resolve_incident(incident_id: str, body: ResolveRequest,
     incident.resolved_by = officer.id
     incident.resolution_note = (body.note or "").strip() or None
     db.commit()
+    db.refresh(incident)
+    # the app and owners follow the crash-alert record: close that case too
+    crash_response.authority_close_case(db, incident, officer, body.note)
     db.refresh(incident)
     return _incident_summary(db, incident)
 

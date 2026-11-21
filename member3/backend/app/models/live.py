@@ -1,6 +1,6 @@
 """
 AGHAT SETHU — Live crash notifications, authority review queue, SMS log and
-Google sign-in state (migration 009); owners' crash answers (migration 010); crash case outcomes (011).
+Google sign-in state (migration 009); owners' crash answers (migration 010); crash case outcomes (011); resolution codes (012).
 """
 
 import uuid
@@ -163,3 +163,43 @@ class CrashCaseOutcome(Base):
 
 def new_incident_key() -> str:
     return "CR-" + uuid.uuid4().hex[:10].upper()
+
+
+class ResolutionCode(Base):
+    """A super-admin resolution code for one crash (migration 012): an officer
+    whose owner cannot give their code asks for one (status requested); a super
+    admin generates it (issued: only its hash is kept, valid
+    RESOLUTION_OVERRIDE_TTL_MIN); resolving with it marks it used. Owners' own
+    codes are derived (services/resolution_codes.py) and never stored."""
+
+    __tablename__ = "resolution_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    incident_ref = Column(String(64), nullable=False, index=True)   # CR-... key or incidents.id
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=True)
+    status = Column(String(12), nullable=False, default="requested")  # requested | issued | used | declined
+    reason = Column(Text, nullable=True)
+    requested_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    requested_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    code_hash = Column(String(64), nullable=True)
+    issued_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    issued_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    used_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ResolutionAttempt(Base):
+    """Every resolve attempt with codes (migration 012): wrong ones count
+    toward the lock-out, the right one records how the crash was closed."""
+
+    __tablename__ = "resolution_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    incident_ref = Column(String(64), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    ok = Column(Integer, nullable=False, default=0)          # 1 = accepted
+    method = Column(String(12), nullable=True)               # owner | override
+    at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (Index("ix_resolution_attempts_ref_at", "incident_ref", "at"),)

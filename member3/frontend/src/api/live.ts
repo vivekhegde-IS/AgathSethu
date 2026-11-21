@@ -145,6 +145,7 @@ export type LiveEventType =
   | 'fine.issued' | 'fine.updated' | 'crash.detected' | 'crash.partner_named'
   | 'hit_and_run.detected' | 'notification.created' | 'review.updated'
   | 'crash.response' | 'crash.response_reviewed' | 'crash.case_updated'
+  | 'resolution.code_requested' | 'resolution.code_issued'
 
 export interface LiveEvent {
   type: LiveEventType

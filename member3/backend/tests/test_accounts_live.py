@@ -162,7 +162,7 @@ def test_single_vehicle_crash_notifies_owner_by_sms(client, clean):
         sms = db.query(SmsMessage).filter(SmsMessage.user_id == clean["A"]["user_id"]).all()
         assert len(sms) == 1 and sms[0].provider == "console"
         assert sms[0].body.startswith("Crash detected for your vehicle KA 01 AT 4521 at ")
-        assert "Junction 1" in sms[0].body and sms[0].body.endswith("Are you safe? Emergency: 112.")
+        assert "Junction 1" in sms[0].body and "Are you safe? Emergency: 112. Resolution code: " in sms[0].body
         assert [n.kind for n in notes_of(db, clean["A"]["user_id"])] == ["crash"]
         assert notes_of(db, clean["B"]["user_id"]) == []
     finally:

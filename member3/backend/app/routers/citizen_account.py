@@ -29,7 +29,7 @@ from app.dependencies.deps import require_citizen
 from app.models.citizen_fines import Fine, FinePayment, Notification
 from app.models.live import CrashReport, CrashResponse
 from app.models.models import Incident, IncidentVehicle, User, Vehicle
-from app.services import crash_response
+from app.services import crash_response, resolution_codes
 from app.services.notification_service import IST, KIND_CRASH, incident_reference, junction_label
 from app.services.plate_validation import format_plate
 
@@ -143,6 +143,9 @@ def _my_crash(db: Session, user: User, key: str) -> dict:
         "your_vehicles": [plate], "involved_vehicles": [plate], "role_determined": False,
         "response": crash_response.response_view(db, answer),
         "case": case,
+        # give it to the officer who attends; hidden once the case is resolved
+        "resolution_code": resolution_codes.code_for_owner(db, user, key,
+                                                           closed=bool(case and case["outcome"] == "resolved")),
         "notifications": [_notification_view(n) for n in notes],
     }
 
@@ -189,6 +192,8 @@ def my_incident(incident_id: str, response: Response, user: User = Depends(requi
                                   Notification.incident_id == incident.id).all()],
         "response": crash_response.response_view(db, answer),
         "case": crash_response.case_view(db, incident_id),
+        "resolution_code": resolution_codes.code_for_owner(
+            db, user, crash_response.case_ref_for_incident(db, incident), closed=incident.status in ("resolved", "false_positive")),
     }
 
 

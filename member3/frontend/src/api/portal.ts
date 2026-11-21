@@ -84,6 +84,8 @@ export interface BoardIncident {
   resolved_at: string | null
   resolved_by_name: string | null
   resolution_note: string | null
+  /** how it was closed: the owners' codes, a super-admin code, or null (owners resolved it themselves) */
+  resolved_with?: 'owner' | 'override' | null
   /** closed as a false alarm (status false_positive) */
   false_alarm?: boolean
   /** owners' "are you safe?" answers, newest first, and the case outcome from them */
@@ -137,8 +139,58 @@ export async function fetchRecords(
   })).data
 }
 
-export async function resolveIncident(id: string, password: string, note: string): Promise<BoardIncident> {
-  return (await apiClient.post<BoardIncident>(`/incidents/${id}/resolve`, { password, note: note || null })).data
+/** Resolving needs every alerted owner's 6-digit code, or one super-admin code. */
+export async function resolveIncident(id: string, password: string, note: string, codes: string[]): Promise<BoardIncident> {
+  return (await apiClient.post<BoardIncident>(`/incidents/${id}/resolve`, { password, note: note || null, codes })).data
+}
+
+export interface ResolutionRequest {
+  id: number
+  incident_ref: string
+  status: 'requested' | 'issued' | 'used' | 'declined' | 'expired'
+  reason: string | null
+  requested_by_name: string | null
+  requested_at: string | null
+  issued_by_name: string | null
+  issued_at: string | null
+  expires_at: string | null
+  used_at: string | null
+  incident_id?: string | null
+  reference?: string
+  location?: string | null
+  crash_at?: string | null
+  /** only in the super admin's response when the code is generated */
+  code?: string
+}
+
+export interface ResolutionStatus {
+  incident_ref: string
+  owners: { name: string | null; plates: string[]; code_valid: boolean; expires_at: string }[]
+  owner_codes_possible: boolean
+  request: ResolutionRequest | null
+  locked_until: string | null
+}
+
+export async function getResolutionStatus(id: string): Promise<ResolutionStatus> {
+  return (await apiClient.get<ResolutionStatus>(`/incidents/${id}/resolution-code`, { params: { _: Date.now() } })).data
+}
+
+export async function requestResolutionCode(id: string, reason: string): Promise<ResolutionRequest> {
+  return (await apiClient.post<ResolutionRequest>(`/incidents/${id}/resolution-code/request`, { reason: reason || null })).data
+}
+
+// super admin
+export async function getResolutionRequests() {
+  return (await apiClient.get<{ items: ResolutionRequest[]; total: number }>('/admin/resolution-requests',
+    { params: { _: Date.now() } })).data
+}
+
+export async function issueResolutionCode(requestId: number): Promise<ResolutionRequest> {
+  return (await apiClient.post<ResolutionRequest>(`/admin/resolution-requests/${requestId}/issue`)).data
+}
+
+export async function declineResolutionCode(requestId: number): Promise<ResolutionRequest> {
+  return (await apiClient.post<ResolutionRequest>(`/admin/resolution-requests/${requestId}/decline`)).data
 }
 
 // ── authority: dashboard, fines, cameras ──────────────────────────────
@@ -276,6 +328,8 @@ export interface CitizenIncident {
   role_determined: boolean
   response?: CrashResponseView | null
   case?: CaseView | null
+  /** the owner's code for the officer who attends; null once resolved or expired */
+  resolution_code?: { code: string; expires_at: string; hint: string } | null
 }
 
 export async function fetchCitizenIncident(id: string): Promise<CitizenIncident> {

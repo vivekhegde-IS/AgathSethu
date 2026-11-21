@@ -67,6 +67,12 @@ def answer(client, letter, key, body):
     assert r.status_code == 200, r.text
 
 
+def owner_codes(client, key):
+    """What each owner reads out to the officer at the scene."""
+    return [client.get(f"/api/citizen/incidents/{key}", headers=bearer(login(client, OWNER[letter])))
+            .json()["resolution_code"]["code"] for letter in ("A", "B")]
+
+
 def radar_item(client, incident_id):
     token = login(client, "authority.admin")
     return client.get(f"/api/incidents/{incident_id}", headers=bearer(token)).json()["incident"]
@@ -104,7 +110,8 @@ def test_officer_resolving_on_the_radar_resolves_the_app_case(client, pair):
     incident_id = rfid_incident(pair)
     token = login(client, "authority.admin")
     r = client.post(f"/api/incidents/{incident_id}/resolve", headers=bearer(token),
-                    json={"password": TEST_PASSWORD, "note": "Cleared at the scene"})
+                    json={"password": TEST_PASSWORD, "note": "Cleared at the scene",
+                          "codes": owner_codes(client, pair["key"])})
     assert r.status_code == 200, r.text
     db = SessionLocal()
     try:
@@ -183,7 +190,8 @@ def test_officer_resolving_keeps_the_fled_label(client, pair):
     _mark_fled(incident_id, "B")
     token = login(client, "authority.admin")
     r = client.post(f"/api/incidents/{incident_id}/resolve", headers=bearer(token),
-                    json={"password": TEST_PASSWORD, "note": "Cleared"})
+                    json={"password": TEST_PASSWORD, "note": "Cleared",
+                          "codes": owner_codes(client, pair["key"])})
     assert r.status_code == 200
     item = radar_item(client, incident_id)
     assert item["resolved"] is True and item["hit_and_run"] is True

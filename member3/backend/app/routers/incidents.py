@@ -43,7 +43,7 @@ from app.models.models import (
     Vehicle,
     VisionMatch,
 )
-from app.services import crash_response
+from app.services import crash_response, resolution_codes
 from app.services.anpr_partial import analyze_reads as analyze_partial_plate
 from app.services.anpr_partial import known_char_count, match_pattern
 from app.services.fine_service import registry_candidates, rfid_registry_candidates
@@ -191,6 +191,8 @@ def _resolution(db: Session, incident: Incident, vehicles) -> dict:
         "resolved_at": _iso(incident.resolved_at),
         "resolved_by_name": resolver.full_name if resolver else None,
         "resolution_note": incident.resolution_note,
+        # owner codes | override (super-admin code) | None (owners resolved it themselves / older crash)
+        "resolved_with": resolution_codes.resolved_with(db, case_ref) if incident.status in CLOSED else None,
         # owners' "are you safe?" answers (app / website) and the case outcome from them
         "citizen_responses": answers,
         "latest_citizen_response": answers[0] if answers else None,
@@ -294,18 +296,46 @@ async def incident_board(
 class ResolveRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
     note: str | None = Field(default=None, max_length=2000)
+    # every alerted owner's resolution code, or one super-admin code
+    codes: list[str] = Field(default_factory=list, max_length=10)
+    code: str | None = Field(default=None, max_length=20)     # one code (the mobile app's shape)
+
+
+class CodeRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+@router.get("/{incident_id}/resolution-code")
+async def resolution_code_status(incident_id: str, db: Session = Depends(get_db)):
+    """Whose codes the Resolve dialog needs, and the super-admin request state.
+    Never the codes themselves."""
+    return resolution_codes.status_for_officer(db, _load(db, incident_id))
+
+
+@router.post("/{incident_id}/resolution-code/request")
+async def request_resolution_code(incident_id: str, body: CodeRequest | None = None,
+                                  officer: User = Depends(require_authority), db: Session = Depends(get_db)):
+    """The owner cannot give their code: ask a super admin to generate one."""
+    incident = _load(db, incident_id)
+    if incident.status in CLOSED:
+        raise HTTPException(status_code=409, detail="Incident is already resolved.")
+    row = resolution_codes.request_override(db, incident, officer, body.reason if body else None)
+    return resolution_codes.request_view(db, row)
 
 
 @router.post("/{incident_id}/resolve")
 async def resolve_incident(incident_id: str, body: ResolveRequest,
                            officer: User = Depends(require_authority), db: Session = Depends(get_db)):
-    """Mark an incident resolved. The officer re-enters their own password,
-    checked against their stored hash; who, when and the note are recorded."""
+    """Mark an incident resolved. The officer re-enters their own password
+    (checked against their stored hash) and enters the owners' resolution codes
+    or a super-admin code (services/resolution_codes.py); who, when, how and
+    the note are recorded."""
     incident = _load(db, incident_id)
     if not verify_password(body.password, officer.password_hash):
         raise HTTPException(status_code=403, detail="Password is incorrect.")
     if incident.status in CLOSED:
         raise HTTPException(status_code=409, detail="Incident is already resolved.")
+    resolution_codes.verify(db, incident, officer, [*body.codes, *([body.code] if body.code else [])])
     incident.status = "resolved"
     incident.resolved_at = datetime.now(timezone.utc)
     incident.resolved_by = officer.id

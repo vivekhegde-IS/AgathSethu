@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     # other owner has this many seconds to answer too, else the case is flagged
     # "not resolved" for the authority.
     CRASH_PARTNER_ANSWER_WINDOW_S: float = 30.0
+    # resolving a crash needs the owners' codes or a super-admin code (services/resolution_codes.py)
+    RESOLUTION_OWNER_CODE_TTL_H: float = 24.0
+    RESOLUTION_OVERRIDE_TTL_MIN: float = 30.0
+    RESOLUTION_MAX_WRONG: int = 5
+    RESOLUTION_LOCK_MIN: float = 15.0
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH) if ENV_PATH.exists() else ".env",

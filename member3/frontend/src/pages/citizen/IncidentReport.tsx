@@ -76,6 +76,18 @@ export const CitizenIncidentReport: React.FC = () => {
           </p>
         </Card>
       )}
+      {data?.resolution_code && (
+        <Card title="Your resolution code">
+          <p className="font-mono text-3xl font-bold tracking-[0.3em] text-slate-900" aria-label="Resolution code">
+            {data.resolution_code.code}
+          </p>
+          <p className="mt-2 text-sm text-slate-700">{data.resolution_code.hint}</p>
+          <p className="mt-1 text-xs text-slate-600">
+            Valid until {formatIst(data.resolution_code.expires_at)}. Never share it on a phone call or message
+            from someone who is not at the scene.
+          </p>
+        </Card>
+      )}
       {data && incidentId && (
         <Card title={data.response ? 'Your answer' : 'Are you safe?'}>
           <CrashAnswerPanel refId={incidentId} current={data.response} outcome={data.case}

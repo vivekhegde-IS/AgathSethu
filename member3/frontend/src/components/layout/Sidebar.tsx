@@ -2,16 +2,21 @@ import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@stores/authStore'
 import { getPendingOfficers, OFFICERS_CHANGED } from '@api/live'
+import { getResolutionRequests } from '@api/portal'
 import { isAdmin } from '@services/auth/roleGuard'
 
 const PENDING_REFRESH_MS = 60_000
 
-/** Officer sign-ups waiting for an admin (admins only; 0 for everyone else). */
+/** Officer sign-ups + resolution-code requests waiting for an admin (admins only; 0 for everyone else). */
 function usePendingOfficers(enabled: boolean): number {
   const [count, setCount] = useState(0)
   useEffect(() => {
     if (!enabled) return undefined
-    const load = () => { getPendingOfficers().then((r) => setCount(r.total)).catch(() => undefined) }
+    const load = () => {
+      Promise.all([getPendingOfficers(), getResolutionRequests()])
+        .then(([officers, codes]) => setCount(officers.total + codes.total))
+        .catch(() => undefined)
+    }
     load()
     const timer = window.setInterval(load, PENDING_REFRESH_MS)
     window.addEventListener(OFFICERS_CHANGED, load)

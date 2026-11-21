@@ -130,3 +130,52 @@ Fields for the app (citizen and officer screens):
   pages, with the case outcome badge (auto-resolved / not resolved / waiting).
   (The old Control Room page was removed; its API endpoints remain for the app.)
 - The Incident Radar now updates live as answers arrive.
+
+## Resolution codes (closing a crash needs proof)
+
+An officer can mark a crash **resolved** only with its resolution code(s), plus
+their own password as before. Crashes the owners resolve themselves (every owner
+answered "minor") and the authority accepting an owner's answer need no code.
+
+**Who generates the codes:** the server, never a person.
+
+- **Owner codes.** Every owner alerted about a crash has their own 6-digit code.
+  It is derived from the server secret, the crash and the owner (HMAC-SHA256), so
+  nothing readable is stored. It is already in the crash alert SMS / notification
+  text ("Resolution code: 123456 ..."). It works only for that crash and owner,
+  for 24 h. A two-car crash needs **both** owners' codes.
+- **Super-admin code.** An owner cannot be reached. The officer asks; a super
+  admin (role `admin`) generates a random 6-digit code (Python `secrets`). It is
+  shown once to the admin, stored as a hash only, single use, and valid for
+  30 min. The admin passes it to the officer by phone or radio.
+- 5 wrong codes on one crash lock it for 15 min. A new super-admin code lifts the lock.
+
+### Endpoints
+
+| Who | Call | Notes |
+|---|---|---|
+| Owner | `GET /api/citizen/incidents/{CR-key or id}` | new field `resolution_code: {code, expires_at, hint}`; `null` once resolved or expired |
+| Officer | `GET /api/incidents/{incident_id}/resolution-code` | whose codes are needed (never the codes), `request` state, `locked_until` |
+| Officer | `POST /api/incidents/{incident_id}/resolution-code/request` `{reason}` | ask the super admin |
+| Officer | `POST /api/incidents/{incident_id}/resolve` `{password, note, codes: ["123456","654321"]}` or `{password, note, code: "123456"}` | 422 no code, 403 wrong / missing one, 423 locked; response has `resolved_with: "owner" \| "override"` |
+| Super admin | `GET /api/admin/resolution-requests` | waiting requests |
+| Super admin | `POST /api/admin/resolution-requests/{id}/issue` | response `code` (shown once) |
+| Super admin | `POST /api/admin/resolution-requests/{id}/decline` | |
+| Super admin | `POST /api/admin/incidents/{incident_id}/resolution-code` `{reason}` | generate without a request |
+
+Live events on `/ws/events` (authority room): `resolution.code_requested`,
+`resolution.code_issued`. Neither ever carries the code.
+
+### Prompt for the app side
+
+> On the owner's crash detail screen (the one that calls
+> `GET /api/citizen/incidents/{id}`), when `resolution_code` is not null, show a
+> card "Your resolution code" with `resolution_code.code` in large digits, the
+> `hint` text and "valid until `expires_at`". Hide it when it is null. If the
+> app's officer side resolves crashes, the resolve form must send
+> `codes: [...]` (one field per owner, from `GET /api/incidents/{id}/resolution-code`
+> `owners`) or a single super-admin `code`, and offer "Ask the super admin"
+> (`POST .../resolution-code/request`). Show the 403 / 423 `detail` text to the
+> officer. In the super admin's Officer Approvals tab, add a "Resolution-code
+> requests" list (`GET /api/admin/resolution-requests`) with **Generate code**
+> (show the returned `code` once, large) and **Decline**.

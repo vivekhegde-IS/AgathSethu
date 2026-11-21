@@ -173,10 +173,16 @@ def test_resolve_requires_password_and_rolls_off_radar(client, world):
     officer = _token(world["officer"])
     url = f"/api/incidents/{world['incident_id']}/resolve"
     assert client.post(url, headers=officer, json={"password": "wrong"}).status_code == 403
-    r = client.post(url, headers=officer, json={"password": PASSWORD, "note": "Cleared by patrol"})
+    # each involved owner's resolution code (what they read out to the officer)
+    codes = [client.get(f"/api/citizen/incidents/{world['incident_id']}", headers=_token(world[who]))
+             .json()["resolution_code"]["code"] for who in ("alice", "bob")]
+    assert client.post(url, headers=officer, json={"password": PASSWORD}).status_code == 422
+    assert client.post(url, headers=officer, json={"password": PASSWORD, "codes": codes[:1]}).status_code == 403
+    r = client.post(url, headers=officer, json={"password": PASSWORD, "note": "Cleared by patrol", "codes": codes})
     assert r.status_code == 200, r.text
     assert r.json()["resolved"] and r.json()["resolved_by_name"] == "Officer"
-    assert client.post(url, headers=officer, json={"password": PASSWORD}).status_code == 409
+    assert r.json()["resolved_with"] == "owner"
+    assert client.post(url, headers=officer, json={"password": PASSWORD, "codes": codes}).status_code == 409
 
     # resolved: no longer an active radar incident
     radar = client.get("/api/incidents/board?view=radar", headers=officer).json()

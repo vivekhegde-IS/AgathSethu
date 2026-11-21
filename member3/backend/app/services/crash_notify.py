@@ -335,6 +335,8 @@ def _alert_owner(db, vehicle: Vehicle, report: CrashReport, incident_key: str, l
     else:
         title = f"Crash detected: {plate}"
         text = f"Crash detected for your vehicle {plate} at {when}, {location}. Are you safe? Emergency: 112."
+    from app.services.resolution_codes import alert_line   # avoid an import cycle
+    text += alert_line(incident_key, owner.id)    # the officer who attends needs it to close the case
     note = _notify(db, owner, KIND_CRASH, title, text, vehicle.plate_number,
                    {"incident_key": incident_key, "marker": "crash", "report_id": report.id,
                     "location": location, "crash_at": now.isoformat()})
